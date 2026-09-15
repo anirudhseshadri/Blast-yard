@@ -27,14 +27,22 @@
 import { unpack } from './snapshot.js';
 import { serverUrl } from './config.js';
 
-const RETRY_WINDOW_MS = 10000;   // how long to keep trying before dropping to the menu
+/* Two different waits, because they are two different situations.
+
+   The first connection may be waking a sleeping free server, which takes
+   around half a minute, so give it a minute before giving up. A socket that
+   drops after we were already talking is a real problem, so ten seconds is
+   plenty there, as MULTIPLAYER.md asks. */
+const WAKE_WINDOW_MS = 60000;    // first connection: the server may be asleep
+const RETRY_WINDOW_MS = 10000;   // after that: a drop is a drop
 const RETRY_EVERY_MS = 1000;
 
 export function connect({ onOpen, onRoom, onStarting, onSnapshot, onEnded,
-                          onServerError, onReconnecting, onLost }){
+                          onServerError, onWaking, onReconnecting, onLost }){
   let ws = null;
   let lastInput = '';
   let closedByUs = false;
+  let everConnected = false;
   let retryingSince = 0;
   let retryTimer = null;
 
@@ -42,20 +50,27 @@ export function connect({ onOpen, onRoom, onStarting, onSnapshot, onEnded,
   // to put you in a room rather than back at the menu
   let myCode = null, myName = '';
   let rejoinPending = false;
+  // what we were asked to do before the socket was ready. A sleeping server
+  // means the first attempt usually fails, so this has to survive until some
+  // later attempt gets through, or the click is silently lost.
+  let pendingFirst = null;
 
-  function open(isRetry){
+  function open(){
     ws = new WebSocket(serverUrl());
 
     ws.onopen = ()=>{
       retryingSince = 0;
-      if(isRetry && myCode){
+      everConnected = true;
+      if(myCode){
         // Phase A rejoin: ask for the room again by code. This is not slot
         // recovery -- if the match moved on without you, the server says so
         // and you land back on the menu. Holding your slot is Phase B.
         rejoinPending = true;
         ws.send(JSON.stringify({t:'join', code:myCode, name:myName}));
+      }else if(pendingFirst){
+        ws.send(JSON.stringify(pendingFirst));
       }
-      onOpen(!!isRetry);
+      onOpen();
     };
 
     ws.onmessage = e=>{
@@ -63,6 +78,7 @@ export function connect({ onOpen, onRoom, onStarting, onSnapshot, onEnded,
       try { m = JSON.parse(e.data); } catch { return; }
       if(m.t==='room'){
         myCode = m.code;               // remember how to get back if this drops
+        pendingFirst = null;           // we are in, so stop trying to get in
         rejoinPending = false;
         onRoom(m);
       }
@@ -80,26 +96,46 @@ export function connect({ onOpen, onRoom, onStarting, onSnapshot, onEnded,
     ws.onclose = ()=>{
       if(closedByUs) return;
       if(!retryingSince) retryingSince = Date.now();
-      if(Date.now() - retryingSince > RETRY_WINDOW_MS){
-        onLost('Lost the connection to the server.');
-        return;
+      const waiting = Date.now() - retryingSince;
+
+      if(!everConnected){
+        if(waiting > WAKE_WINDOW_MS){
+          onLost('Could not reach the server. It may be starting up, so try again in a minute.');
+          return;
+        }
+        onWaking();
+      }else{
+        if(waiting > RETRY_WINDOW_MS){
+          onLost('Lost the connection to the server.');
+          return;
+        }
+        onReconnecting();
       }
-      onReconnecting();
-      retryTimer = setTimeout(()=>open(true), RETRY_EVERY_MS);
+      retryTimer = setTimeout(open, RETRY_EVERY_MS);
     };
 
     // onerror is always followed by onclose, which does the retrying
     ws.onerror = ()=>{};
   }
-  open(false);
+  open();
 
   const send = obj => {
     if(ws && ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify(obj));
   };
 
   return {
-    create(name){ myCode=null; myName=name; send({t:'create', name}); },
-    join(code, name){ myCode=code; myName=name; send({t:'join', code, name}); },
+    /* These two queue themselves if the socket is not up yet, which is the
+       normal case while a free server is waking. */
+    create(name){
+      myCode=null; myName=name;
+      pendingFirst={t:'create', name};
+      send(pendingFirst);
+    },
+    join(code, name){
+      myCode=null; myName=name;
+      pendingFirst={t:'join', code, name};
+      send(pendingFirst);
+    },
     setName(name){ myName=name; send({t:'name', name}); },
     setReady(value){ send({t:'ready', value}); },
     setMap(id){ send({t:'map', id}); },

@@ -7,7 +7,7 @@
    Use wss:// for a deployed server. A browser on an https:// page refuses to
    open a plain ws:// socket, so http-to-ws only works for local development. */
 
-const SERVER_URL = 'wss://blast-yard-server.onrender.com';
+const SERVER_URL = 'wss://blast-yard.onrender.com';
 
 export function serverUrl(){
   // ?server=... wins, which makes it easy to try a local server against the

@@ -56,19 +56,16 @@ function amReady(){
 
 /* ---------------- online ---------------- */
 
-/* `first` is what to send once the socket is up: create a room, or join one. */
-function goOnline(first){
+/* `action` is what we want to do: create a room, or join one. It is asked for
+   straight away and queues itself until the socket is actually up, because a
+   sleeping free server usually is not. */
+function goOnline(action){
   if(net) return;
   mode='online';
-  // a free server sleeps when idle and takes a while to wake, so say so rather
-  // than leaving a dead-looking button
   ui.setNote('Reaching the server...');
 
   net = connect({
-    onOpen(isRetry){
-      ui.setStatus('');
-      if(!isRetry) first(net);
-    },
+    onOpen(){ ui.setStatus(''); },
     onRoom(state){
       room = state;
       mySlot = state.you;
@@ -101,6 +98,7 @@ function goOnline(first){
       ui.setNote(reason);
       if(!room){ mode='menu'; net.close(); net=null; ui.showMenu(); }
     },
+    onWaking(){ ui.setStatus('Waking up the server, this can take a minute...'); },
     onReconnecting(){ ui.setStatus('Reconnecting...'); },
     onLost(reason){
       ui.setStatus('');
@@ -109,6 +107,8 @@ function goOnline(first){
       ui.showMenu();
     }
   });
+
+  action(net);
 }
 
 /* ---------------- loop ---------------- */
