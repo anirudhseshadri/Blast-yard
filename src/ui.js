@@ -3,10 +3,9 @@
    This is the only module that touches the menu DOM. It reports button presses
    back through the handlers passed to `init`.
 
-   The lobby is rendered from one lobby-state object. The host builds that
-   object and sends it to everyone, so host and guests draw the same screen
-   through the same function. Nothing here decides anything about the room; it
-   only shows what the state says and reports what was pressed. */
+   The lobby is rendered straight from the server's `room` message. The server
+   owns that state, so every player is drawing the same thing from the same
+   source; this module decides nothing about the room. */
 
 import { SLOT_COLOR, SLOT_NAME } from './constants.js';
 import { MAPS } from './maps/index.js';
@@ -15,24 +14,24 @@ const el = id => document.getElementById(id);
 const NAME_KEY = 'blastyard.name';
 
 let menu, lobby, roomCodeEl, playerList, lobbyTitle, lobbySub, lobbyNote;
-let btnStart, btnReady, menuNote, nameInput, mapPick;
+let btnStart, btnReady, menuNote, nameInput, mapPick, netStatus;
 
-export function init({ onLocal, onHost, onJoin, onStart, onReady, onName, onMap }){
+export function init({ onLocal, onCreate, onJoin, onStart, onReady, onName, onMap, onLeave }){
   menu=el('menu'); lobby=el('lobby');
   roomCodeEl=el('roomCode'); playerList=el('playerList');
   lobbyTitle=el('lobbyTitle'); lobbySub=el('lobbySub'); lobbyNote=el('lobbyNote');
   btnStart=el('btnStart'); btnReady=el('btnReady'); menuNote=el('menuNote');
-  nameInput=el('nameInput'); mapPick=el('mapPick');
+  nameInput=el('nameInput'); mapPick=el('mapPick'); netStatus=el('netStatus');
 
-  el('btnLocal').onclick = onLocal;
-  el('btnHost').onclick  = onHost;
-  el('btnJoin').onclick  = ()=>{
+  el('btnLocal').onclick  = onLocal;
+  el('btnHost').onclick   = onCreate;
+  el('btnJoin').onclick   = ()=>{
     const code = el('joinCode').value.trim().toUpperCase();
-    if(code.length<3){ setNote('Enter the 5 letter code the host gave you.'); return; }
+    if(code.length<3){ setNote('Enter the 5 letter code you were given.'); return; }
     onJoin(code);
   };
   el('btnCopy').onclick  = ()=>navigator.clipboard?.writeText(roomCodeEl.textContent);
-  el('btnLeave').onclick = ()=>location.reload();
+  el('btnLeave').onclick = onLeave;
   btnStart.onclick = onStart;
   btnReady.onclick = onReady;
 
@@ -40,7 +39,6 @@ export function init({ onLocal, onHost, onJoin, onStart, onReady, onName, onMap 
   mapPick.onchange = ()=>onMap(mapPick.value);
 
   nameInput.value = loadName();
-  // report on every keystroke so the others see the name as it is typed
   nameInput.oninput = ()=>{
     const name = nameInput.value.slice(0,12);
     saveName(name);
@@ -58,54 +56,59 @@ function saveName(name){
 
 export function setNote(text){ menuNote.textContent = text; }
 export function hideMenu(){ menu.classList.add('hide'); }
+export function showMenu(){ menu.classList.remove('hide'); lobby.classList.add('hide'); }
 export function showLobby(){ menu.classList.add('hide'); lobby.classList.remove('hide'); }
 export function hideLobby(){ lobby.classList.add('hide'); }
 
-/* Draw the shared lobby. `state` is what the host broadcast, `myId` says which
-   row is this browser. Host and guest both come through here. */
-export function renderLobby(state, myId){
-  const me = state.players.find(p=>p.id===myId);
-  const iAmHost = !!(me && me.isHost);
+/* A line across the top of the board for anything about the connection:
+   waking the server, reconnecting, counting down to the start. */
+export function setStatus(text){
+  netStatus.textContent = text || '';
+  netStatus.classList.toggle('hide', !text);
+}
+
+/* Draw the shared lobby from the server's room message. `state.you` is this
+   browser's slot, which is how a row knows it is yours. */
+export function renderLobby(state){
+  const me = state.players.find(p=>p.slot===state.you);
+  const iOwn = !!(me && me.owner);
   const readyCount = state.players.filter(p=>p.ready).length;
   const played = state.players.some(p=>p.wins>0);
 
   roomCodeEl.textContent = state.code;
-  lobbyTitle.textContent = played ? 'Next round' : (iAmHost ? 'Room open' : 'You are in');
-  lobbySub.textContent = iAmHost
+  lobbyTitle.textContent = played ? 'Next round' : (iOwn ? 'Room open' : 'You are in');
+  lobbySub.textContent = iOwn
     ? 'Send this code to your cousins.'
     : 'Everyone here sees the same screen.';
 
   playerList.innerHTML = state.players.map(p=>{
     const tags = [
-      p.isHost ? '<span class="tag">host</span>' : '',
+      p.owner ? '<span class="tag">owner</span>' : '',
       p.wins ? `<span class="tag wins">${p.wins} ${p.wins===1?'win':'wins'}</span>` : '',
       p.ready ? '<span class="tag ready">ready</span>' : '<span class="tag">not ready</span>'
     ].join('');
-    const label = (p.name || SLOT_NAME[p.slot]) + (p.id===myId ? ' (you)' : '');
-    return `<li class="${p.id===myId?'me':''}">`
+    const label = (p.name || SLOT_NAME[p.slot]) + (p.slot===state.you ? ' (you)' : '');
+    return `<li class="${p.slot===state.you?'me':''}">`
          + `<span class="dot" style="background:${SLOT_COLOR[p.slot]}"></span>`
          + `<span class="pname">${esc(label)}</span>${tags}</li>`;
   }).join('');
 
-  // your own controls
   btnReady.textContent = me && me.ready ? 'Ready' : 'Not ready';
   btnReady.classList.toggle('on', !!(me && me.ready));
-  if(nameInput.value !== (me ? me.name : '') && document.activeElement !== nameInput){
-    nameInput.value = me ? me.name : '';
+  if(me && nameInput.value !== me.name && document.activeElement !== nameInput){
+    nameInput.value = me.name;
   }
 
-  // the map is the host's call, but everyone sees the choice
+  // the map and the start button belong to whoever made the room
   mapPick.value = state.mapId;
-  mapPick.disabled = !iAmHost;
-
-  // starting is the host's call too
-  btnStart.classList.toggle('hide', !iAmHost);
+  mapPick.disabled = !iOwn;
+  btnStart.classList.toggle('hide', !iOwn);
   btnStart.disabled = readyCount < 2;
   btnStart.textContent = played ? 'Start next round' : 'Start match';
 
-  lobbyNote.textContent = iAmHost
+  lobbyNote.textContent = iOwn
     ? (readyCount < 2 ? 'Two players need to be ready before you can start.' : '')
-    : 'Waiting for the host to start.';
+    : 'Waiting for the room owner to start.';
 }
 
 /* Names come from other people's browsers, so never trust them as markup. */
