@@ -106,6 +106,14 @@
   .tag.wins{border-color:#7a6432;background:#2a2417;color:#ffcf6b}
   .waiting{font-family:system-ui,sans-serif;font-size:13px;color:#9aa3b8}
 
+  /* connection news: waking the server, reconnecting, counting down */
+  #netStatus{
+    position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    background:#1f2330;border:1px solid #454d63;border-radius:99px;
+    padding:6px 16px;font-family:system-ui,sans-serif;font-size:13px;
+    color:#ffcf6b;white-space:nowrap;pointer-events:none;z-index:5;
+  }
+
   /* touch controls */
   #pad{display:none;margin-top:14px;justify-content:space-between;align-items:center;gap:16px;touch-action:none;user-select:none}
   body.touch #pad{display:flex}
@@ -142,19 +150,21 @@
   <div id="stage">
     <canvas id="cv" width="600" height="560"></canvas>
 
+    <div id="netStatus" class="hide"></div>
+
     <div class="panel" id="menu">
       <div class="card">
         <h1>Blast Yard</h1>
         <p class="sub">Drop bombs. Outlive everyone. The yard closes in when the clock runs out.</p>
         <div class="row">
           <button id="btnLocal">Play on one keyboard</button>
-          <button id="btnHost" class="ghost">Host an online game</button>
+          <button id="btnHost" class="ghost">Create an online room</button>
         </div>
         <div class="row">
           <input id="joinCode" placeholder="CODE" maxlength="5">
           <button id="btnJoin" class="ghost">Join with code</button>
         </div>
-        <p class="note" id="menuNote">Online play connects your browsers directly to each other. Keep this tab open while you play.</p>
+        <p class="note" id="menuNote">Online games run on a shared server, so it does not matter whose tab stays open.</p>
       </div>
     </div>
 
@@ -201,10 +211,6 @@
   </div>
 </div>
 
-<!-- PeerJS first: it puts a global `Peer` on the page that src/net.js uses.
-     Module scripts run after the page is parsed, so this has already loaded. -->
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"
-        onerror="var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js';document.head.appendChild(s);"></script>
 <script type="module" src="src/main.js"></script>
 </body>
 </html>
