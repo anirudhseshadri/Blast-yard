@@ -6,6 +6,7 @@
    prototype used, so the feel is unchanged. */
 
 export default {
+  id: 'yard',
   name: 'The Yard',
 
   // Soft blocks are scattered over every free tile that is not next to a spawn.

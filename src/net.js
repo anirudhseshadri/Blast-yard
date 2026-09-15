@@ -4,6 +4,18 @@
    only their {u,d,l,r,b,k} input and draw the snapshots the host sends back
    about 20 times a second. There is no server. The room code is the PeerJS id.
 
+   Messages the host sends out:
+     {k:'lobby', ...}  who is in the room, their names, ready flags and scores
+     {k:'go'}          the match is starting
+     {k:'full'}        no room left, you are about to be hung up on
+     {k:'s', ...}      a snapshot of the world, during a match
+     {k:'slot', slot}  sent once, privately, when a guest connects
+
+   Messages a guest sends back:
+     {k:'i', i:{...}} its input
+     {k:'name', name}  the name it typed
+     {k:'ready', ready}  its ready toggle
+
    This module knows nothing about the canvas or the menu. It reports what
    happened through the callbacks its caller passes in. */
 
@@ -64,8 +76,10 @@ export function unpack(s){
                          player list, so it decides.
      onLeave(peerId)     someone dropped
      onInput(peerId, input)    a guest pressed something
+     onName(peerId, name)      a guest typed a name
+     onReady(peerId, ready)    a guest toggled ready
    Returns the handle the game loop uses to push snapshots out. */
-export function createHost({ onOpen, onError, onJoin, onLeave, onInput }){
+export function createHost({ onOpen, onError, onJoin, onLeave, onInput, onName, onReady }){
   let peer=null, conns=[], code='';
 
   function open(){
@@ -79,14 +93,25 @@ export function createHost({ onOpen, onError, onJoin, onLeave, onInput }){
     });
     peer.on('connection',conn=>{
       conn.on('open',()=>{
-        const slot = onJoin(conn.peer);
-        if(slot==null){ conn.close(); return; }   // room is full
+        // Register the connection before asking for a slot. onJoin broadcasts
+        // the updated lobby, and the guest that just arrived has to be on the
+        // list to receive it -- that packet is what opens its lobby screen.
         conns.push(conn);
+        const slot = onJoin(conn.peer);
+        if(slot==null){                           // room is full
+          conns = conns.filter(c=>c!==conn);
+          // say why before hanging up, or the guest just sees a dropped host
+          conn.send(JSON.stringify({k:'full'}));
+          setTimeout(()=>conn.close(), 250);
+          return;
+        }
         conn.send(JSON.stringify({k:'slot',slot}));
       });
       conn.on('data',raw=>{
         const d=JSON.parse(raw);
-        if(d.k==='i') onInput(conn.peer, {u:d.u,d:d.d,l:d.l,r:d.r,b:d.b,k:d.k||0});
+        if(d.k==='i') onInput(conn.peer, {u:d.i.u,d:d.i.d,l:d.i.l,r:d.i.r,b:d.i.b,k:d.i.k||0});
+        else if(d.k==='name') onName(conn.peer, String(d.name||'').slice(0,12));
+        else if(d.k==='ready') onReady(conn.peer, !!d.ready);
       });
       conn.on('close',()=>{
         conns=conns.filter(c=>c!==conn);
@@ -112,37 +137,53 @@ export function createHost({ onOpen, onError, onJoin, onLeave, onInput }){
 /* ---------------- guest ---------------- */
 
 /* Callbacks:
-     onOpen()            connected to the host
+     onOpen(myId)        connected to the host. myId is this browser's peer id,
+                         which is how you find yourself in a lobby packet
      onSlot(slot)        the host says you are this player
+     onLobby(state)      the shared lobby. Arriving means you are in the lobby,
+                         either before the first round or back after one
      onStart()           the host started the match
      onSnapshot(view)    a fresh picture of the world
+     onFull()            the room was already full, so you were turned away
      onClose()           the host went away
      onError(peerError)  could not connect */
-export function createGuest(code, { onOpen, onSlot, onStart, onSnapshot, onClose, onError }){
+export function createGuest(code, { onOpen, onSlot, onLobby, onStart, onSnapshot, onFull, onClose, onError }){
   const peer = new Peer({debug:0});
-  let hostConn=null, lastSent='';
+  let hostConn=null, lastSent='', turnedAway=false;
 
   peer.on('open',()=>{
     // unreliable mode: a dropped input or snapshot is better than a stalled queue
     hostConn = peer.connect(ID_PREFIX+code, {reliable:false});
-    hostConn.on('open',onOpen);
+    hostConn.on('open',()=>onOpen(peer.id));
     hostConn.on('data',raw=>{
       const d=JSON.parse(raw);
       if(d.k==='slot') onSlot(d.slot);
+      else if(d.k==='full'){ turnedAway=true; onFull(); }
+      else if(d.k==='lobby') onLobby(d);
       else if(d.k==='go') onStart();
       else if(d.k==='s') onSnapshot(unpack(raw));
     });
-    hostConn.on('close',onClose);
+    hostConn.on('close',()=>{ if(!turnedAway) onClose(); });
   });
   peer.on('error',onError);
 
   return {
-    /* Only send when something actually changed. */
+    /* Only send when something actually changed.
+
+       The input goes in its own field rather than being spread across the
+       message. Input has a `k` of its own (the kick key) and spreading it
+       here overwrote `k:'i'`, the message kind, with 0 or 1 -- so the host
+       dropped every input a guest ever sent. */
     sendInput(inp){
       const s=JSON.stringify(inp);
       if(s===lastSent || !hostConn || !hostConn.open) return;
       lastSent=s;
-      hostConn.send(JSON.stringify({k:'i',...inp}));
+      hostConn.send(JSON.stringify({k:'i', i:inp}));
+    },
+    /* Lobby chatter: a typed name, a ready toggle. */
+    send(obj){
+      if(!hostConn || !hostConn.open) return;
+      hostConn.send(JSON.stringify(obj));
     }
   };
 }
