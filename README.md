@@ -25,11 +25,26 @@ Deploying is unchanged: push the repo to Vercel or GitHub Pages.
     src/input.js    keyboard and touch
     src/ui.js       menu and lobby screens
     src/constants.js  values shared by all of the above
-    src/maps/       one file per map, data only
+    src/maps/       one file per map, data only, plus index.js listing them
 
 `game.js` holds the tuned numbers for movement, bomb timing and blasts. The
 simulation never reads the DOM, so the host and every guest run the same rules,
 and the same file can move to a server later (see MULTIPLAYER.md).
+
+## The lobby
+
+Everyone in a room sees the same lobby screen. The host owns it and sends it
+out after every change, so there is never a version only one person can see.
+
+- Type a name. It is kept in this browser, so nobody retypes it next time.
+- Each player has their own ready toggle.
+- The host picks the map; everyone sees the choice.
+- Only the host can start, and only once two players are ready.
+- When someone leaves, they disappear from everyone's list.
+- After a round the lobby comes back with the scores on it, so the next round
+  is one tap. Wins are counted for the session only and are never stored.
+
+Four players to a room. A fifth is told the room is full.
 
 ## Controls
 

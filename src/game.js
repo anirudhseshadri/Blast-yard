@@ -5,11 +5,11 @@
    a host browser today and on a server later without changes. */
 
 import { COLS, ROWS, TS, EMPTY, SOLID, SOFT, PU, PU_WEIGHT, SLOT_NAME } from './constants.js';
-import YARD from './maps/yard.js';
+import { DEFAULT_MAP } from './maps/index.js';
 
 /* ---------------- setup ---------------- */
 
-export function newGame(playerDefs, map = YARD){
+export function newGame(playerDefs, map = DEFAULT_MAP){
   const grid = [];
   for(let r=0;r<ROWS;r++){
     grid[r]=[];
@@ -49,7 +49,7 @@ export function newGame(playerDefs, map = YARD){
   return {
     map, grid, pickups, players,
     bombs:[], flames:[], bombId:1,
-    time:map.roundLength, phase:'play', over:'', shrinkStep:0, shrinkT:0,
+    time:map.roundLength, phase:'play', over:'', winner:null, shrinkStep:0, shrinkT:0,
     spiral: makeSpiral()
   };
 }
@@ -200,9 +200,10 @@ export function step(G, dt){
   const alive = G.players.filter(p=>p.alive);
   if(G.players.length>1 && alive.length<=1){
     G.phase='over';
-    G.over = alive.length===1 ? SLOT_NAME[alive[0].slot]+' wins' : 'Everyone blew up';
+    G.winner = alive.length===1 ? alive[0].slot : null;
+    G.over = alive.length===1 ? displayName(alive[0])+' wins' : 'Everyone blew up';
   }else if(G.players.length===1 && alive.length===0){
-    G.phase='over'; G.over='You blew yourself up';
+    G.phase='over'; G.winner=null; G.over='You blew yourself up';
   }
 }
 
@@ -301,6 +302,11 @@ function grant(p,type){
 }
 
 function kill(p){ p.alive=false; }
+
+/* Players type their own name online. Local play falls back to the slot colour. */
+function displayName(p){
+  return p.name || SLOT_NAME[p.slot];
+}
 
 /* ---------------- what the renderer and the network see ---------------- */
 

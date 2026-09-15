@@ -78,6 +78,34 @@
   ul{margin:8px 0 0;padding-left:18px;font-family:system-ui,sans-serif;font-size:13px;color:#9aa3b8;line-height:1.6}
   .hide{display:none}
 
+  /* lobby */
+  input.name{text-transform:none;letter-spacing:0;width:170px}
+  select{
+    font:inherit;font-size:15px;
+    background:#151822;color:var(--paper);border:1px solid #454d63;border-radius:5px;
+    padding:10px 12px;
+  }
+  select:disabled{opacity:.75}
+  .lbl{font-family:system-ui,sans-serif;font-size:13px;color:#9aa3b8;align-self:center}
+  button.on{background:#6fcf82;color:#12200f}
+  #playerList{list-style:none;padding:0;margin:12px 0 0}
+  #playerList li{
+    display:flex;align-items:center;gap:9px;
+    padding:7px 9px;margin-bottom:5px;
+    background:#191d28;border:1px solid #2f3648;border-radius:6px;
+    font-family:system-ui,sans-serif;font-size:14px;color:var(--paper);
+  }
+  #playerList li.me{border-color:#5a647d;background:#1d2230}
+  .dot{width:14px;height:14px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 0 1px rgba(0,0,0,.45)}
+  .pname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tag{
+    font-size:11px;letter-spacing:.4px;text-transform:uppercase;
+    padding:2px 7px;border-radius:99px;border:1px solid #454d63;color:#9aa3b8;
+  }
+  .tag.ready{border-color:#3f7a4c;background:#1c2d20;color:#8ddb9d}
+  .tag.wins{border-color:#7a6432;background:#2a2417;color:#ffcf6b}
+  .waiting{font-family:system-ui,sans-serif;font-size:13px;color:#9aa3b8}
+
   /* touch controls */
   #pad{display:none;margin-top:14px;justify-content:space-between;align-items:center;gap:16px;touch-action:none;user-select:none}
   body.touch #pad{display:flex}
@@ -136,11 +164,20 @@
         <p class="sub" id="lobbySub">Send this code to your cousins.</p>
         <div class="code" id="roomCode">-----</div>
         <div class="row">
+          <input id="nameInput" class="name" placeholder="Your name" maxlength="12">
+          <button id="btnReady" class="ghost">Ready</button>
+        </div>
+        <div class="row">
+          <span class="lbl">Map</span>
+          <select id="mapPick"></select>
+        </div>
+        <ul id="playerList"></ul>
+        <div class="row" style="margin-top:12px">
           <button id="btnStart">Start match</button>
           <button id="btnCopy" class="ghost">Copy code</button>
           <button id="btnLeave" class="ghost">Leave</button>
         </div>
-        <ul id="playerList"></ul>
+        <p class="waiting" id="lobbyNote"></p>
       </div>
     </div>
   </div>
