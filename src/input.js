@@ -15,8 +15,11 @@ const LOCAL_MAP = [
 
 const touch={u:0,d:0,l:0,r:0,b:0,k:0};
 
-let dpad=null, kickBtn=null;
-const cells={};
+let stick=null, knob=null, kickBtn=null;
+const arrows={};
+
+const KNOB_TRAVEL = 50;   // how far the knob slides from the middle
+const DEAD_ZONE = 16;     // thumb this close to the middle asks for nothing
 
 /* `onRestart` fires on R and on a tap of the canvas. The caller decides
    whether a restart is allowed. */
@@ -35,17 +38,19 @@ export function init({ canvas, onRestart }){
     document.body.classList.add('touch');
   }
 
-  dpad=document.getElementById('dpad');
+  stick=document.getElementById('stick');
+  knob=document.getElementById('knob');
   kickBtn=document.getElementById('kickBtn');
-  document.querySelectorAll('#dpad [data-k]').forEach(el=>{ cells[el.dataset.k]=el; });
+  document.querySelectorAll('#stick .sdir').forEach(el=>{ arrows[el.dataset.k]=el; });
 
-  // d-pad: one touch surface. Direction comes from where your thumb is,
-  // so you can slide between directions without lifting your finger.
-  dpad.addEventListener('pointerdown',e=>{ e.preventDefault(); dpad.setPointerCapture(e.pointerId); setDir(e); });
-  dpad.addEventListener('pointermove',e=>{ if(e.buttons||e.pointerType==='touch') setDir(e); });
-  dpad.addEventListener('pointerup',e=>{ e.preventDefault(); clearDir(); });
-  dpad.addEventListener('pointercancel',clearDir);
-  dpad.addEventListener('contextmenu',e=>e.preventDefault());
+  // The stick is one touch surface. Your thumb goes anywhere on it and the
+  // direction comes from where it is, so you can roll from one direction to
+  // the next without lifting, and hold one as long as you like.
+  stick.addEventListener('pointerdown',e=>{ e.preventDefault(); stick.setPointerCapture(e.pointerId); aim(e); });
+  stick.addEventListener('pointermove',e=>{ if(e.buttons||e.pointerType==='touch'){ e.preventDefault(); aim(e); } });
+  stick.addEventListener('pointerup',e=>{ e.preventDefault(); release(); });
+  stick.addEventListener('pointercancel',release);
+  stick.addEventListener('contextmenu',e=>e.preventDefault());
 
   // action buttons
   document.querySelectorAll('#actions [data-k]').forEach(el=>{
@@ -56,27 +61,51 @@ export function init({ canvas, onRestart }){
     el.addEventListener('pointercancel',off);
     el.addEventListener('contextmenu',e=>e.preventDefault());
   });
+  // a finger lifted anywhere lets go of everything, in case a button missed it.
+  // Scoped to the pad: the lobby uses the same 'on' class for its ready button.
   addEventListener('pointerup',()=>{
-    touch.b=0; touch.k=0; clearDir();
-    document.querySelectorAll('.on').forEach(el=>el.classList.remove('on'));
+    touch.b=0; touch.k=0; release();
+    document.querySelectorAll('#pad .on').forEach(el=>el.classList.remove('on'));
   });
 }
 
 function clearDir(){
   touch.u=touch.d=touch.l=touch.r=0;
-  for(const k in cells) cells[k].classList.remove('on');
+  for(const k in arrows) arrows[k].classList.remove('on');
 }
 
-function setDir(e){
-  const rect=dpad.getBoundingClientRect();
+function moveKnob(dx,dy){
+  if(knob) knob.style.transform = `translate(${dx}px, ${dy}px)`;
+}
+
+function release(){
+  clearDir();
+  if(knob) knob.classList.remove('on');
+  moveKnob(0,0);
+}
+
+/* Four directions only, so the knob snaps to the one being asked for rather
+   than following the thumb into a diagonal the game cannot use. */
+function aim(e){
+  const rect=stick.getBoundingClientRect();
   const x=e.clientX-rect.left-rect.width/2;
   const y=e.clientY-rect.top-rect.height/2;
-  const dead=rect.width*0.10;
   clearDir();
-  if(Math.abs(x)<dead && Math.abs(y)<dead) return;
+
+  if(Math.hypot(x,y) < DEAD_ZONE){
+    knob.classList.remove('on');
+    moveKnob(0,0);
+    return;
+  }
+
   const k = Math.abs(x)>Math.abs(y) ? (x>0?'r':'l') : (y>0?'d':'u');
   touch[k]=1;
-  cells[k].classList.add('on');
+  arrows[k].classList.add('on');
+  knob.classList.add('on');
+
+  const reach = Math.min(Math.hypot(x,y), KNOB_TRAVEL);
+  moveKnob(k==='l' ? -reach : k==='r' ? reach : 0,
+           k==='u' ? -reach : k==='d' ? reach : 0);
 }
 
 /* Player `i` on a shared keyboard. Only player one also gets the touch pad. */
