@@ -60,8 +60,12 @@ out after every change, so there is never a version only one person can see.
 - Whoever made the room picks the map; everyone sees the choice.
 - Only that player can start, and only once two players are ready.
 - When someone leaves, they disappear from everyone's list.
-- After a round the lobby comes back with the scores on it, so the next round
-  is one tap. Wins are counted for the session only and are never stored.
+- The room owner picks best of 3, 5 or 7.
+- Between rounds everyone gets the same scoreboard, counting down to the next
+  round. Nobody has to tap anything until the match is over.
+- When a match is settled the lobby comes back, showing who has won how many
+  matches. Everything is counted in memory for the session only and is never
+  stored anywhere.
 
 Four players to a room. A fifth is told the room is full.
 

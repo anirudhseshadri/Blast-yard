@@ -106,6 +106,21 @@
   .tag.wins{border-color:#7a6432;background:#2a2417;color:#ffcf6b}
   .waiting{font-family:system-ui,sans-serif;font-size:13px;color:#9aa3b8}
 
+  /* scoreboard: one pip per round it takes to win, filled as they are won */
+  #sbList{list-style:none;padding:0;margin:14px 0 0}
+  #sbList li{
+    display:flex;align-items:center;gap:9px;
+    padding:9px 10px;margin-bottom:6px;
+    background:#191d28;border:1px solid #2f3648;border-radius:6px;
+    font-family:system-ui,sans-serif;font-size:14px;color:var(--paper);
+  }
+  #sbList li.me{border-color:#5a647d;background:#1d2230}
+  #sbList li.champ{border-color:#ffcf6b;background:#2a2417}
+  .pips{display:flex;gap:5px;margin-left:auto}
+  .pip{width:13px;height:13px;border-radius:50%;border:2px solid #4a5266;box-sizing:border-box}
+  .pip.won{border-color:transparent}
+  #sbTitle{font-size:26px}
+
   /* connection news: waking the server, reconnecting, counting down */
   #netStatus{
     position:absolute;top:10px;left:50%;transform:translateX(-50%);
@@ -213,6 +228,12 @@
         <div class="row">
           <span class="lbl">Map</span>
           <select id="mapPick"></select>
+          <span class="lbl">Rounds</span>
+          <select id="bestPick">
+            <option value="3">Best of 3</option>
+            <option value="5">Best of 5</option>
+            <option value="7">Best of 7</option>
+          </select>
         </div>
         <ul id="playerList"></ul>
         <div class="row" style="margin-top:12px">
@@ -221,6 +242,15 @@
           <button id="btnLeave" class="ghost">Leave</button>
         </div>
         <p class="waiting" id="lobbyNote"></p>
+      </div>
+    </div>
+
+    <div class="panel hide" id="scoreboard">
+      <div class="card">
+        <h1 id="sbTitle">Round over</h1>
+        <p class="sub" id="sbSub"></p>
+        <ul id="sbList"></ul>
+        <p class="waiting" id="sbNext"></p>
       </div>
     </div>
   </div>

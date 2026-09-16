@@ -21,7 +21,9 @@ let view = null;       // latest snapshot from the server
 let lerpView = null;   // smoothed copy that actually gets drawn
 let mySlot = 0;
 let net = null;
-let inLobby = false;   // online: showing the lobby rather than the board
+let inLobby = false;           // online: showing the lobby rather than the board
+let showingScoreboard = false; // online: the between rounds screen is up
+let countdown = null;          // the ticking text on that screen
 
 render.attach(document.getElementById('cv'));
 
@@ -46,6 +48,7 @@ ui.init({
   onName(name){ if(net) net.setName(name); },
   onReady(){ if(net) net.setReady(!amReady()); },
   onMap(id){ if(net) net.setMap(id); },
+  onBestOf(value){ if(net) net.setBestOf(value); },
   onStart(){ if(net) net.start(); },
   onLeave(){ if(net) net.leave(); location.reload(); }
 });
@@ -71,6 +74,9 @@ function goOnline(action){
     onRoom(state){
       room = state;
       mySlot = state.you;
+      showingScoreboard = false;
+      clearInterval(countdown);
+      ui.hideScoreboard();
       // the room says which map the next round uses, so the board can be
       // drawn in its colours with its special tiles on it
       render.setMap(mapById(state.mapId));
@@ -81,6 +87,9 @@ function goOnline(action){
       ui.renderLobby(state);
     },
     onStarting(seconds){
+      showingScoreboard = false;
+      clearInterval(countdown);
+      ui.hideScoreboard();
       let left = seconds;
       ui.setStatus('Starting in ' + left);
       const id = setInterval(()=>{
@@ -93,12 +102,33 @@ function goOnline(action){
       }, 1000);
     },
     onSnapshot(v){
+      // Snapshots only flow while a round is actually being played: the server
+      // stops them while the result and the scoreboard are up. So a snapshot
+      // arriving means the next round is live and no panel belongs on screen.
+      // That keeps the scoreboard from ever being stranded over a live game.
       inLobby = false;
+      showingScoreboard = false;
+      clearInterval(countdown);
       ui.hideLobby();
+      ui.hideScoreboard();
       view = v;
       if(!lerpView) lerpView = JSON.parse(JSON.stringify(view));
     },
-    onEnded(){ /* the last snapshot carries the result; the lobby follows */ },
+    /* A round is over. The board holds for a moment first, so by the time this
+       arrives the explosion has landed and the scoreboard can take the screen.
+       The server decides what happens next; this just counts down to it. */
+    onEnded(end){
+      showingScoreboard = true;
+      clearInterval(countdown);
+      ui.showScoreboard(end, mySlot);
+      let left = end.nextIn;
+      ui.setScoreboardCountdown(left, end.matchOver);
+      countdown = setInterval(()=>{
+        left--;
+        ui.setScoreboardCountdown(left, end.matchOver);
+        if(left<=0) clearInterval(countdown);
+      }, 1000);
+    },
     onServerError(reason){
       ui.setNote(reason);
       if(!room){ mode='menu'; net.close(); net=null; ui.showMenu(); }

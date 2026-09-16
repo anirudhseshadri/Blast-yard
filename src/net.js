@@ -10,6 +10,7 @@
      {t:'name', name}            rename yourself
      {t:'ready', value}          ready toggle
      {t:'map', id}               room owner picks the map
+     {t:'bestof', value}         room owner picks how many rounds
      {t:'start'}                 room owner starts the match
      {t:'input', u,d,l,r,b,k}    what you are pressing
      {t:'leave'}                 leave the room
@@ -139,6 +140,7 @@ export function connect({ onOpen, onRoom, onStarting, onSnapshot, onEnded,
     setName(name){ myName=name; send({t:'name', name}); },
     setReady(value){ send({t:'ready', value}); },
     setMap(id){ send({t:'map', id}); },
+    setBestOf(value){ send({t:'bestof', value}); },
     start(){ send({t:'start'}); },
     leave(){ send({t:'leave'}); },
 

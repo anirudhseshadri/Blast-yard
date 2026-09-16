@@ -69,25 +69,43 @@ Client to server:
     { t: "name", name }
     { t: "ready", value }
     { t: "map", id }               // room owner only
+    { t: "bestof", value }         // room owner only, 3 / 5 / 7
     { t: "start" }                 // room owner only
     { t: "input", u, d, l, r, b, k }
     { t: "leave" }
 
 Server to client:
 
-    { t: "room", code, you, mapId, phase, players: [{ slot, name, ready, owner, wins }] }
+    { t: "room", code, you, mapId, bestOf, phase,
+      players: [{ slot, name, ready, owner, wins, matches }] }
     { t: "starting", inSeconds }
     { t: "snap", s: { ... } }
-    { t: "ended", winner, winnerSlot, scores }
+    { t: "ended", winner, winnerSlot, round, bestOf, target, matchOver,
+      champion, championSlot, nextIn, scores }
     { t: "error", reason }
 
-`name` and `map` are additions to the list in MULTIPLAYER.md. The lobby already
+`name`, `map` and `bestof` are additions to the list in MULTIPLAYER.md. The lobby already
 had a name field and a map picker, and the server owns lobby state now, so
 those two choices had to become messages.
 
 The snapshot sits in its own `s` field rather than being spread into the
 message, because the packed snapshot has a `t` of its own for the round clock
 and spreading it would overwrite the message type.
+
+## A match, round by round
+
+A room runs a match of best of three, five or seven. `wins` counts rounds in
+the match being played; `matches` counts matches won since the room opened.
+Both live in memory and are gone when the room is.
+
+    lobby  -> starting    3 seconds, then the first round
+           -> playing     the round itself
+           -> result      1.5s, the finished board holds so the last blast lands
+           -> scoreboard  5s, the score, counting down to the next round
+           -> playing     the next round, with nobody tapping anything
+
+The scoreboard goes back to the lobby instead when the match is decided, or
+when fewer than two players are left to play the next round.
 
 ## Files
 

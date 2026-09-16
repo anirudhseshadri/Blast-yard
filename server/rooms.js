@@ -12,8 +12,10 @@ import { pack } from '../src/snapshot.js';
 export const MAX_PLAYERS = 4;
 export const MAX_ROOMS = 50;
 const SNAPSHOT_INTERVAL = 0.05;   // seconds, so 20 a second
-const ROUND_END_PAUSE = 4;        // seconds the result shows before the lobby returns
-const START_COUNTDOWN = 3;        // seconds between "start" and the first tick
+const RESULT_HOLD = 1.5;          // seconds the finished board stays up, before the scoreboard
+const SCOREBOARD_PAUSE = 5;       // seconds of scoreboard, counting down to the next round
+const START_COUNTDOWN = 3;        // seconds between "start" and the first round
+export const BEST_OF = [3,5,7];   // what the lobby may pick
 const EMPTY_ROOM_TTL = 60000;     // a room dies a minute after its last player leaves
 const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no I, L, O, 0 or 1
 
@@ -24,9 +26,11 @@ export function makeCode(){
 export function createRoom(code){
   return {
     code,
-    players: [],          // {slot, name, ready, owner, wins, input, send}
+    players: [],          // {slot, name, ready, owner, wins, matches, input, send}
     mapId: DEFAULT_MAP.id,
-    phase: 'lobby',       // lobby | starting | playing | ended
+    bestOf: 3,            // rounds it takes to win the match
+    round: 0,             // which round of the current match is being played
+    phase: 'lobby',       // lobby | starting | playing | result | scoreboard
     G: null,
     last: 0,              // timestamp of the previous tick
     snapT: 0,             // seconds since the last snapshot went out
@@ -59,7 +63,9 @@ export function addPlayer(room, name, send){
   const player = {
     slot, name: cleanName(name), ready:false,
     owner: room.players.length===0,
-    wins:0, input:{u:0,d:0,l:0,r:0,b:0,k:0}, send
+    wins:0,      // rounds won in the match being played
+    matches:0,   // matches won since this room opened. Memory only, never stored
+    input:{u:0,d:0,l:0,r:0,b:0,k:0}, send
   };
   room.players.push(player);
   compactSlots(room);
@@ -95,6 +101,20 @@ export function canStart(room){
   return room.phase==='lobby' && readyCount(room) >= 2;
 }
 
+/* Best of three is won by two rounds, best of five by three, and so on. */
+export function winsNeeded(room){
+  return Math.ceil(room.bestOf / 2);
+}
+
+function leader(room){
+  return room.players.slice().sort((a,b)=>b.wins-a.wins)[0] || null;
+}
+
+function matchDecided(room){
+  const top = leader(room);
+  return !!top && top.wins >= winsNeeded(room);
+}
+
 /* ---------------- messages out ---------------- */
 
 export function roomMessage(room, forPlayer){
@@ -103,11 +123,13 @@ export function roomMessage(room, forPlayer){
     code: room.code,
     you: forPlayer ? forPlayer.slot : null,
     mapId: room.mapId,
+    bestOf: room.bestOf,
     phase: room.phase,
     players: room.players
       .slice()
       .sort((a,b)=>a.slot-b.slot)
-      .map(p=>({ slot:p.slot, name:p.name, ready:p.ready, owner:p.owner, wins:p.wins }))
+      .map(p=>({ slot:p.slot, name:p.name, ready:p.ready, owner:p.owner,
+                 wins:p.wins, matches:p.matches }))
   };
 }
 
@@ -124,6 +146,8 @@ export function broadcast(room, msg){
 export function beginCountdown(room){
   room.phase = 'starting';
   room.startAt = Date.now() + START_COUNTDOWN*1000;
+  room.round = 0;
+  room.players.forEach(p=>{ p.wins = 0; });   // a new match starts level
   broadcast(room, { t:'starting', inSeconds: START_COUNTDOWN });
 }
 
@@ -133,33 +157,69 @@ function beginMatch(room){
     .sort((a,b)=>a.slot-b.slot)
     .map(p=>({ name:p.name }));
   room.G = newGame(defs, mapById(room.mapId));
+  room.round++;
   room.phase = 'playing';
   room.last = Date.now();
   room.snapT = 0;
   room.players.forEach(p=>{ p.input={u:0,d:0,l:0,r:0,b:0,k:0}; });
 }
 
+/* A round has just been won. Hold the finished board for a moment so the last
+   explosion lands, then the scoreboard takes over. */
 function endRound(room){
-  room.phase = 'ended';
-  room.endT = ROUND_END_PAUSE;
+  room.phase = 'result';
+  room.endT = RESULT_HOLD;
   // one last snapshot so everyone actually sees the result on the board: the
   // regular 20-a-second one may not land on the tick the round ended
   broadcast(room, { t:'snap', s: pack(buildView(room.G)) });
-  const winnerSlot = room.G.winner;
-  const winner = room.players.find(p=>p.slot===winnerSlot);
+
+  const winner = room.players.find(p=>p.slot===room.G.winner);
   if(winner) winner.wins++;
+  room.roundWinner = winner || null;
+}
+
+function enterScoreboard(room){
+  room.phase = 'scoreboard';
+  room.endT = SCOREBOARD_PAUSE;
+
+  const decided = matchDecided(room);
+  const champion = decided ? leader(room) : null;
+  if(champion) champion.matches++;
+  room.matchOver = decided;
+
   broadcast(room, {
     t:'ended',
-    winner: winner ? winner.name || null : null,
-    winnerSlot: winnerSlot===undefined ? null : winnerSlot,
+    winner: room.roundWinner ? room.roundWinner.name || null : null,
+    winnerSlot: room.roundWinner ? room.roundWinner.slot : null,
+    round: room.round,
+    bestOf: room.bestOf,
+    target: winsNeeded(room),
+    matchOver: decided,
+    champion: champion ? champion.name || null : null,
+    championSlot: champion ? champion.slot : null,
+    nextIn: SCOREBOARD_PAUSE,
     scores: room.players.slice().sort((a,b)=>a.slot-b.slot)
-      .map(p=>({ slot:p.slot, name:p.name, wins:p.wins }))
+      .map(p=>({ slot:p.slot, name:p.name, wins:p.wins, matches:p.matches }))
   });
+}
+
+/* The scoreboard has run its course: either the next round, or back to the
+   lobby if the match is settled or there is nobody left to play it. */
+function afterScoreboard(room){
+  if(room.matchOver || room.players.length < 2){
+    backToLobby(room);
+    return;
+  }
+  beginMatch(room);
 }
 
 function backToLobby(room){
   room.G = null;
   room.phase = 'lobby';
+  room.round = 0;
+  room.matchOver = false;
+  room.roundWinner = null;
+  room.players.forEach(p=>{ p.wins = 0; });   // the match is over, so the board clears
   compactSlots(room);
   broadcastRoom(room);
 }
@@ -171,12 +231,15 @@ export function tick(room){
     if(Date.now() >= room.startAt) beginMatch(room);
     return;
   }
-  if(room.phase==='ended'){
+  if(room.phase==='result' || room.phase==='scoreboard'){
     const now = Date.now();
     const dt = Math.min(0.05, (now-room.last)/1000);
     room.last = now;
     room.endT -= dt;
-    if(room.endT<=0) backToLobby(room);
+    if(room.endT<=0){
+      if(room.phase==='result') enterScoreboard(room);
+      else afterScoreboard(room);
+    }
     return;
   }
   if(room.phase!=='playing' || !room.G) return;
@@ -207,5 +270,5 @@ export function isExpired(room){
 }
 
 export function needsTick(room){
-  return room.phase==='starting' || room.phase==='playing' || room.phase==='ended';
+  return room.phase!=='lobby';
 }
