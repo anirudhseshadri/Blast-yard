@@ -5,12 +5,75 @@
    changes it, so the host and a guest draw through exactly this one path. */
 
 import { COLS, ROWS, TS, BAR, W, H, SOLID, SOFT, SLOT_COLOR, SLOT_NAME, BUILD } from './constants.js';
+import { parseLayout } from './maps/legend.js';
+import { DEFAULT_MAP } from './maps/index.js';
 
 let ctx = null;
+
+/* The map decides the tile colours and where the special tiles are. Both are
+   fixed for the whole round, so they are read once here rather than shipped
+   with every snapshot. */
+const DEFAULT_THEME = {
+  floorA:'#2b2f3a', floorB:'#303542',
+  wall:'#7c8699', wallTop:'#98a3b8', wallLip:'#5c6577',
+  crate:'#7d5a3c', crateTop:'#966d48', crateLine:'#5a3f2a'
+};
+let theme = DEFAULT_THEME;
+let specials = new Map();
+
+export function setMap(map){
+  const m = map || DEFAULT_MAP;
+  theme = { ...DEFAULT_THEME, ...(m.theme||{}) };
+  specials = parseLayout(m.layout, m.name).special;
+}
 
 export function attach(canvas){
   canvas.width = W; canvas.height = H;
   ctx = canvas.getContext('2d');
+  setMap(DEFAULT_MAP);
+}
+
+/* Special tiles sit on open floor. A wall or a crate covers one up, and the
+   closing arena turns them into walls, so this only runs on empty tiles. */
+function drawSpecial(r, c, x, y){
+  const s = specials.get(r+','+c);
+  if(!s) return;
+
+  if(s.kind==='water'){
+    ctx.fillStyle='#2f6b8f'; ctx.fillRect(x,y,TS,TS);
+    ctx.fillStyle='#3d87b3'; ctx.fillRect(x,y,TS,3);
+    ctx.strokeStyle='rgba(190,230,255,.45)'; ctx.lineWidth=2; ctx.lineCap='round';
+    for(const [oy,ox] of [[14,6],[26,18]]){
+      ctx.beginPath();
+      ctx.moveTo(x+ox, y+oy);
+      ctx.quadraticCurveTo(x+ox+5, y+oy-4, x+ox+10, y+oy);
+      ctx.stroke();
+    }
+    return;
+  }
+
+  if(s.kind==='conveyor'){
+    ctx.fillStyle='#3b3f4d'; ctx.fillRect(x+1,y+1,TS-2,TS-2);
+    ctx.save();
+    ctx.translate(x+TS/2, y+TS/2);
+    ctx.rotate(Math.atan2(s.dy, s.dx));
+    ctx.strokeStyle='#ffb347'; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.lineJoin='round';
+    for(const o of [-9,0,9]){                 // chevrons pointing the way it pushes
+      ctx.beginPath();
+      ctx.moveTo(o-4,-6); ctx.lineTo(o+3,0); ctx.lineTo(o-4,6);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+
+  if(s.kind==='teleport'){
+    ctx.fillStyle='#241b33'; ctx.fillRect(x+2,y+2,TS-4,TS-4);
+    ctx.strokeStyle='#c77dff'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(x+TS/2, y+TS/2, 12, 0, 7); ctx.stroke();
+    ctx.strokeStyle='rgba(199,125,255,.55)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(x+TS/2, y+TS/2, 6, 0, 7); ctx.stroke();
+  }
 }
 
 function roundRect(x,y,w,h,r){
@@ -129,20 +192,22 @@ export function draw(v, hint=''){
   ctx.fillText(v.closing?'CLOSING':(Math.floor(t/60)+':'+String(t%60).padStart(2,'0')), W-14, BAR/2+7);
   ctx.textAlign='left';
 
-  // floor and blocks
+  // floor, blocks and the map's own tiles
   for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
     const x=c*TS, y=r*TS+BAR, t=v.grid[r][c];
-    ctx.fillStyle = (r+c)%2 ? '#2b2f3a' : '#303542';
+    ctx.fillStyle = (r+c)%2 ? theme.floorA : theme.floorB;
     ctx.fillRect(x,y,TS,TS);
     if(t===SOLID){
-      ctx.fillStyle='#7c8699'; ctx.fillRect(x+2,y+2,TS-4,TS-4);
-      ctx.fillStyle='#98a3b8'; ctx.fillRect(x+2,y+2,TS-4,6);
-      ctx.fillStyle='#5c6577'; ctx.fillRect(x+2,y+TS-8,TS-4,6);
+      ctx.fillStyle=theme.wall;    ctx.fillRect(x+2,y+2,TS-4,TS-4);
+      ctx.fillStyle=theme.wallTop; ctx.fillRect(x+2,y+2,TS-4,6);
+      ctx.fillStyle=theme.wallLip; ctx.fillRect(x+2,y+TS-8,TS-4,6);
     }else if(t===SOFT){
-      ctx.fillStyle='#7d5a3c'; ctx.fillRect(x+3,y+3,TS-6,TS-6);
-      ctx.fillStyle='#966d48'; ctx.fillRect(x+3,y+3,TS-6,5);
-      ctx.strokeStyle='#5a3f2a'; ctx.lineWidth=2;
+      ctx.fillStyle=theme.crate;    ctx.fillRect(x+3,y+3,TS-6,TS-6);
+      ctx.fillStyle=theme.crateTop; ctx.fillRect(x+3,y+3,TS-6,5);
+      ctx.strokeStyle=theme.crateLine; ctx.lineWidth=2;
       ctx.beginPath(); ctx.moveTo(x+3,y+TS/2); ctx.lineTo(x+TS-3,y+TS/2); ctx.stroke();
+    }else{
+      drawSpecial(r,c,x,y);
     }
   }
 

@@ -1,27 +1,45 @@
 /* The classic yard: solid border, pillars on every even row and column.
    Data only. No functions, no drawing, no DOM.
 
-   Task 3 in BRIEF.md turns this into a richer format (typed layouts, special
-   tiles, per-map powerup weights). For now it holds exactly the numbers the
-   prototype used, so the feel is unchanged. */
+   The `_` tiles are the clearance around each spawn. They are floor that
+   never grows a crate, so nobody starts the round boxed in. */
 
 export default {
   id: 'yard',
   name: 'The Yard',
 
-  // Soft blocks are scattered over every free tile that is not next to a spawn.
+  theme: {
+    floorA:   '#2b2f3a',
+    floorB:   '#303542',
+    wall:     '#7c8699',
+    wallTop:  '#98a3b8',
+    wallLip:  '#5c6577',
+    crate:    '#7d5a3c',
+    crateTop: '#966d48',
+    crateLine:'#5a3f2a'
+  },
+
+  layout: [
+    '###############',
+    '#1__.......__3#',
+    '#_#.#.#.#.#.#_#',
+    '#_..........._#',
+    '#.#.#.#.#.#.#.#',
+    '#.............#',
+    '#.#.#.#.#.#.#.#',
+    '#.............#',
+    '#.#.#.#.#.#.#.#',
+    '#_..........._#',
+    '#_#.#.#.#.#.#_#',
+    '#4__.......__2#',
+    '###############'
+  ],
+
   softDensity: 0.26,        // chance a free tile becomes a soft block
   pickupChance: 0.45,       // chance a soft block hides a powerup
 
-  // [row, col] of each starting corner, in slot order.
-  spawns: [[1,1],[11,13],[1,13],[11,1]],
-
-  // Tiles kept clear around every spawn, as [rowOffset, colOffset].
-  spawnClearance: [
-    [0,0],[1,0],[2,0],[-1,0],[-2,0],
-    [0,1],[0,2],[0,-1],[0,-2],
-    [1,1],[-1,-1],[1,-1],[-1,1]
-  ],
+  // how often each powerup comes up on this map, relative to the others
+  powerups: { bomb:22, range:22, speed:14, shield:8, kick:10, fuse:8, skull:10, random:6 },
 
   roundLength: 120,         // seconds before the arena starts closing
   shrinkInterval: 0.28      // seconds between each closing tile

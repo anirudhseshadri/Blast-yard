@@ -6,35 +6,21 @@
 
 import { COLS, ROWS, TS, EMPTY, SOLID, SOFT, PU, PU_WEIGHT, SLOT_NAME } from './constants.js';
 import { DEFAULT_MAP } from './maps/index.js';
+import { parseLayout } from './maps/legend.js';
+
+const CONVEYOR_SPEED = 55;      // pixels a second a belt drags you
 
 /* ---------------- setup ---------------- */
 
 export function newGame(playerDefs, map = DEFAULT_MAP){
-  const grid = [];
-  for(let r=0;r<ROWS;r++){
-    grid[r]=[];
-    for(let c=0;c<COLS;c++){
-      const edge = r===0||c===0||r===ROWS-1||c===COLS-1;
-      const pillar = r%2===0 && c%2===0;
-      grid[r][c] = (edge||pillar) ? SOLID : EMPTY;
-    }
-  }
-  const spawns = map.spawns;
-  const safe = new Set();
-  spawns.forEach(([r,c])=>{
-    map.spawnClearance.forEach(([dr,dc])=>{
-      const rr=r+dr, cc=c+dc;
-      if(grid[rr] && grid[rr][cc]===EMPTY) safe.add(rr+','+cc);
-    });
-  });
+  // the layout is the map: walls, spawns, where crates may grow, special tiles
+  const { grid, soft, spawns, special } = parseLayout(map.layout, map.name);
 
   const pickups = new Map();
-  for(let r=1;r<ROWS-1;r++) for(let c=1;c<COLS-1;c++){
-    if(grid[r][c]!==EMPTY) continue;
-    if(safe.has(r+','+c)) continue;
+  for(const [r,c] of soft){
     if(Math.random()<map.softDensity){
       grid[r][c]=SOFT;
-      if(Math.random()<map.pickupChance) pickups.set(r+','+c,{type:weighted(),hidden:true});
+      if(Math.random()<map.pickupChance) pickups.set(r+','+c,{type:weighted(map),hidden:true});
     }
   }
 
@@ -42,12 +28,12 @@ export function newGame(playerDefs, map = DEFAULT_MAP){
     slot:i, name:d.name, peer:d.peer||null,
     x:(spawns[i][1]+0.5)*TS, y:(spawns[i][0]+0.5)*TS,
     alive:true, maxBombs:1, range:2, speedLv:0, shield:false, kick:false,
-    fuse:2.6, curse:0, live:0, inv:0, face:{x:0,y:1},
+    fuse:2.6, curse:0, live:0, inv:0, onPad:false, face:{x:0,y:1},
     input:{u:0,d:0,l:0,r:0,b:0,k:0}, bombEdge:false, kickEdge:false, passing:new Set()
   }));
 
   return {
-    map, grid, pickups, players,
+    map, grid, pickups, players, special,
     bombs:[], flames:[], bombId:1,
     time:map.roundLength, phase:'play', over:'', winner:null, shrinkStep:0, shrinkT:0,
     spiral: makeSpiral()
@@ -59,10 +45,14 @@ export function restart(G){
   return newGame(defs, G.map);
 }
 
-function weighted(){
-  const total = PU_WEIGHT.reduce((a,b)=>a+b,0);
+/* Each map can say how often its powerups come up. Anything it leaves out
+   falls back to the house weights in constants.js. */
+function weighted(map){
+  const own = map && map.powerups;
+  const weights = PU.map((type,i)=> own && own[type]!=null ? own[type] : PU_WEIGHT[i]);
+  const total = weights.reduce((a,b)=>a+b,0);
   let n = Math.random()*total;
-  for(let i=0;i<PU.length;i++){ n-=PU_WEIGHT[i]; if(n<=0) return PU[i]; }
+  for(let i=0;i<PU.length;i++){ n-=weights[i]; if(n<=0) return PU[i]; }
   return 'bomb';
 }
 
@@ -84,6 +74,16 @@ function makeSpiral(){
 function blockedTile(G,r,c){
   if(r<0||c<0||r>=ROWS||c>=COLS) return true;
   return G.grid[r][c]!==EMPTY;
+}
+
+function specialAt(G,r,c){
+  return G.special.get(r+','+c);
+}
+
+/* Water is walkable, but nothing explosive gets on or across it. */
+function waterAt(G,r,c){
+  const s = specialAt(G,r,c);
+  return !!s && s.kind==='water';
 }
 
 function bombAt(G,r,c){
@@ -141,6 +141,9 @@ export function step(G, dt){
 
     moveP(G,p,{u,d,l,r},dt);
 
+    rideConveyor(G,p,dt);
+    useTeleport(G,p);
+
     if(p.input.k && !p.kickEdge) doKick(G,p);
     p.kickEdge = !!p.input.k;
 
@@ -171,7 +174,7 @@ export function step(G, dt){
       const r=Math.floor(ly/TS), c=Math.floor(lx/TS);
       const hitPlayer = G.players.some(p=>p.alive && Math.abs(p.x-lx)<18 && Math.abs(p.y-ly)<18);
       const other = G.bombs.find(o=>o!==b && Math.floor(o.y/TS)===r && Math.floor(o.x/TS)===c);
-      if(blockedTile(G,r,c) || other || hitPlayer){
+      if(blockedTile(G,r,c) || waterAt(G,r,c) || other || hitPlayer){
         b.x=(Math.round((b.x-TS/2)/TS)+0.5)*TS; b.y=(Math.round((b.y-TS/2)/TS)+0.5)*TS;
         b.vx=b.vy=0;
       }else{ b.x=nx; b.y=ny; }
@@ -233,6 +236,29 @@ function moveP(G, p, dir, dt){
   }
 }
 
+/* A belt drags whoever stands on it. Normal movement is untouched; this is
+   an extra shove on top, and only on a conveyor tile. */
+function rideConveyor(G,p,dt){
+  const s = specialAt(G, Math.floor(p.y/TS), Math.floor(p.x/TS));
+  if(!s || s.kind!=='conveyor') return;
+  const step = CONVEYOR_SPEED*dt;
+  const nx = p.x + s.dx*step, ny = p.y + s.dy*step;
+  if(canStand(G,p,nx,ny)){ p.x=nx; p.y=ny; }
+}
+
+/* Stepping on a pad puts you on its partner. You land standing on that
+   partner, so a pad only fires when you arrive on one under your own steam:
+   stand still on it and nothing happens, which is what stops a player parked
+   on a pad bouncing between the two forever. */
+function useTeleport(G,p){
+  const s = specialAt(G, Math.floor(p.y/TS), Math.floor(p.x/TS));
+  if(!s || s.kind!=='teleport'){ p.onPad=false; return; }
+  if(p.onPad) return;                      // already standing on one
+  const [tr,tc] = s.to;
+  p.x=(tc+0.5)*TS; p.y=(tr+0.5)*TS;
+  p.onPad=true;
+}
+
 function doKick(G,p){
   if(!p.kick) return;
   const r=Math.floor(p.y/TS)+p.face.y, c=Math.floor(p.x/TS)+p.face.x;
@@ -246,6 +272,7 @@ function plant(G,p){
   if(p.live>=p.maxBombs) return;
   const r=Math.floor(p.y/TS), c=Math.floor(p.x/TS);
   if(bombAt(G,r,c)) return;
+  if(waterAt(G,r,c)) return;              // nothing to plant a bomb on
   const b={id:G.bombId++, x:(c+0.5)*TS, y:(r+0.5)*TS, owner:p.slot, fuse:p.fuse, range:p.range, vx:0, vy:0};
   G.bombs.push(b);
   p.live++;
@@ -265,6 +292,7 @@ function detonate(G,b){
       if(rr<0||cc<0||rr>=ROWS||cc>=COLS) break;
       const t=G.grid[rr][cc];
       if(t===SOLID) break;
+      if(waterAt(G,rr,cc)) break;         // the blast dies at the water's edge
       flame(G,rr,cc);
       if(t===SOFT){
         G.grid[rr][cc]=EMPTY;

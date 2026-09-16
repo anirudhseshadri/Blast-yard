@@ -13,6 +13,7 @@ import * as render from './render.js';
 import * as input from './input.js';
 import * as ui from './ui.js';
 import { connect } from './net.js';
+import { mapById, DEFAULT_MAP } from './maps/index.js';
 
 let G = null;          // local play only: the simulation lives here
 let mode = 'menu';     // menu | local | online
@@ -36,7 +37,8 @@ ui.init({
   onLocal(){
     mode='local';
     // no names on a shared keyboard, so the win message uses the slot colours
-    G=newGame([{name:''},{name:''},{name:''},{name:''}]);
+    G=newGame([{name:''},{name:''},{name:''},{name:''}], DEFAULT_MAP);
+    render.setMap(DEFAULT_MAP);
     ui.hideMenu();
   },
   onCreate(){ goOnline(n=>n.create(ui.loadName())); },
@@ -69,6 +71,9 @@ function goOnline(action){
     onRoom(state){
       room = state;
       mySlot = state.you;
+      // the room says which map the next round uses, so the board can be
+      // drawn in its colours with its special tiles on it
+      render.setMap(mapById(state.mapId));
       view=null; lerpView=null;     // drop the old round so the next starts clean
       inLobby = true;
       ui.setStatus('');
