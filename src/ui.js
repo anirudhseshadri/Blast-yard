@@ -14,14 +14,18 @@ const el = id => document.getElementById(id);
 const NAME_KEY = 'blastyard.name';
 
 let menu, lobby, roomCodeEl, playerList, lobbyTitle, lobbySub, lobbyNote;
-let btnStart, btnReady, menuNote, nameInput, mapPick, netStatus;
+let btnStart, btnReady, menuNote, nameInput, mapPick, bestPick, netStatus;
+let scoreboard, sbTitle, sbSub, sbList, sbNext;
 
-export function init({ onLocal, onCreate, onJoin, onStart, onReady, onName, onMap, onLeave }){
+export function init({ onLocal, onCreate, onJoin, onStart, onReady, onName, onMap, onBestOf, onLeave }){
   menu=el('menu'); lobby=el('lobby');
   roomCodeEl=el('roomCode'); playerList=el('playerList');
   lobbyTitle=el('lobbyTitle'); lobbySub=el('lobbySub'); lobbyNote=el('lobbyNote');
   btnStart=el('btnStart'); btnReady=el('btnReady'); menuNote=el('menuNote');
-  nameInput=el('nameInput'); mapPick=el('mapPick'); netStatus=el('netStatus');
+  nameInput=el('nameInput'); mapPick=el('mapPick'); bestPick=el('bestPick');
+  netStatus=el('netStatus');
+  scoreboard=el('scoreboard'); sbTitle=el('sbTitle'); sbSub=el('sbSub');
+  sbList=el('sbList'); sbNext=el('sbNext');
 
   el('btnLocal').onclick  = onLocal;
   el('btnHost').onclick   = onCreate;
@@ -37,6 +41,7 @@ export function init({ onLocal, onCreate, onJoin, onStart, onReady, onName, onMa
 
   mapPick.innerHTML = MAPS.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
   mapPick.onchange = ()=>onMap(mapPick.value);
+  bestPick.onchange = ()=>onBestOf(Number(bestPick.value));
 
   nameInput.value = loadName();
   nameInput.oninput = ()=>{
@@ -59,6 +64,7 @@ export function hideMenu(){ menu.classList.add('hide'); }
 export function showMenu(){ menu.classList.remove('hide'); lobby.classList.add('hide'); }
 export function showLobby(){ menu.classList.add('hide'); lobby.classList.remove('hide'); }
 export function hideLobby(){ lobby.classList.add('hide'); }
+export function hideScoreboard(){ scoreboard.classList.add('hide'); }
 
 /* A line across the top of the board for anything about the connection:
    waking the server, reconnecting, counting down to the start. */
@@ -73,10 +79,10 @@ export function renderLobby(state){
   const me = state.players.find(p=>p.slot===state.you);
   const iOwn = !!(me && me.owner);
   const readyCount = state.players.filter(p=>p.ready).length;
-  const played = state.players.some(p=>p.wins>0);
+  const played = state.players.some(p=>p.matches>0);
 
   roomCodeEl.textContent = state.code;
-  lobbyTitle.textContent = played ? 'Next round' : (iOwn ? 'Room open' : 'You are in');
+  lobbyTitle.textContent = played ? 'Next match' : (iOwn ? 'Room open' : 'You are in');
   lobbySub.textContent = iOwn
     ? 'Send this code to your cousins.'
     : 'Everyone here sees the same screen.';
@@ -84,7 +90,7 @@ export function renderLobby(state){
   playerList.innerHTML = state.players.map(p=>{
     const tags = [
       p.owner ? '<span class="tag">owner</span>' : '',
-      p.wins ? `<span class="tag wins">${p.wins} ${p.wins===1?'win':'wins'}</span>` : '',
+      p.matches ? `<span class="tag wins">${p.matches} ${p.matches===1?'match':'matches'}</span>` : '',
       p.ready ? '<span class="tag ready">ready</span>' : '<span class="tag">not ready</span>'
     ].join('');
     const label = (p.name || SLOT_NAME[p.slot]) + (p.slot===state.you ? ' (you)' : '');
@@ -99,16 +105,54 @@ export function renderLobby(state){
     nameInput.value = me.name;
   }
 
-  // the map and the start button belong to whoever made the room
+  // the map, the round count and the start button belong to whoever made the room
   mapPick.value = state.mapId;
   mapPick.disabled = !iOwn;
+  bestPick.value = String(state.bestOf);
+  bestPick.disabled = !iOwn;
   btnStart.classList.toggle('hide', !iOwn);
   btnStart.disabled = readyCount < 2;
-  btnStart.textContent = played ? 'Start next round' : 'Start match';
+  btnStart.textContent = played ? 'Start another match' : 'Start match';
 
   lobbyNote.textContent = iOwn
     ? (readyCount < 2 ? 'Two players need to be ready before you can start.' : '')
     : 'Waiting for the room owner to start.';
+}
+
+/* The scoreboard between rounds. One pip per round it takes to win the match,
+   filled in as they are won, so the state of the match reads at a glance. */
+export function showScoreboard(end, mySlot){
+  menu.classList.add('hide');
+  lobby.classList.add('hide');
+  scoreboard.classList.remove('hide');
+
+  sbTitle.textContent = end.matchOver
+    ? `${end.champion || SLOT_NAME[end.championSlot]} wins the match`
+    : (end.winner || end.winnerSlot===null
+        ? `${end.winner || SLOT_NAME[end.winnerSlot]} takes the round`
+        : 'Nobody survived');
+  if(end.winnerSlot===null && !end.matchOver) sbTitle.textContent = 'Nobody survived';
+
+  sbSub.textContent = `Round ${end.round} of best of ${end.bestOf}`;
+
+  sbList.innerHTML = end.scores.map(p=>{
+    const pips = Array.from({length:end.target}, (_,i)=>
+      `<span class="pip${i<p.wins?' won':''}"${i<p.wins?` style="background:${SLOT_COLOR[p.slot]}"`:''}></span>`
+    ).join('');
+    const mine = p.slot===mySlot ? ' me' : '';
+    const champ = end.matchOver && p.slot===end.championSlot ? ' champ' : '';
+    return `<li class="${(mine+champ).trim()}">`
+         + `<span class="dot" style="background:${SLOT_COLOR[p.slot]}"></span>`
+         + `<span class="pname">${esc(p.name || SLOT_NAME[p.slot])}</span>`
+         + `<span class="pips">${pips}</span></li>`;
+  }).join('');
+}
+
+export function setScoreboardCountdown(seconds, matchOver){
+  if(seconds<=0){ sbNext.textContent = ''; return; }
+  sbNext.textContent = matchOver
+    ? `Back to the lobby in ${seconds}`
+    : `Next round in ${seconds}`;
 }
 
 /* Names come from other people's browsers, so never trust them as markup. */

@@ -12,7 +12,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import {
   createRoom, makeCode, addPlayer, removePlayer, cleanName,
   roomMessage, broadcastRoom, beginCountdown, canStart, tick,
-  isExpired, needsTick, MAX_ROOMS
+  isExpired, needsTick, MAX_ROOMS, BEST_OF
 } from './rooms.js';
 import { mapById } from '../src/maps/index.js';
 
@@ -56,7 +56,13 @@ wss.on('connection',(ws, req)=>{
     let m;
     try { m = JSON.parse(raw); } catch { return; }      // ignore anything unreadable
     if(!m || typeof m.t !== 'string') return;
+    try { handle(m); } catch(err){
+      // a bug in one handler must not take down every room on the server
+      console.error('message failed:', m.t, err);
+    }
+  });
 
+  function handle(m){
     switch(m.t){
       case 'create': {
         if(room) return fail('You are already in a room.');
@@ -113,6 +119,18 @@ wss.on('connection',(ws, req)=>{
         break;
       }
 
+      // how many rounds the match runs for, same rule as the map: the player
+      // who made the room picks, everyone sees it
+      case 'bestof': {
+        if(!player || !player.owner) return;
+        if(room.phase!=='lobby') return;
+        const value = Number(m.value);
+        if(!BEST_OF.includes(value)) return;
+        room.bestOf = value;
+        broadcastRoom(room);
+        break;
+      }
+
       case 'start': {
         if(!player || !player.owner) return fail('Only the player who made the room can start it.');
         if(!canStart(room)) return fail('Two players need to be ready first.');
@@ -134,7 +152,7 @@ wss.on('connection',(ws, req)=>{
         break;
       }
     }
-  });
+  }
 
   ws.on('close',()=>{
     if(room && player){
