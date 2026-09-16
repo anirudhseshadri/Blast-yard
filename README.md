@@ -82,8 +82,11 @@ Three ship: The Yard (the original), Scrapheap (dense, fast) and Waterworks
 ## Controls
 
 Arrow keys or WASD to move, space or enter to drop a bomb, K or left shift to
-kick. On a phone the d-pad appears automatically: hold your thumb on it and
-slide between directions without lifting. Add `?pad` to the URL to force the
-touch controls on a laptop.
+kick.
+
+On a phone a four way joystick appears automatically. Put your thumb anywhere
+on it and the knob snaps to the direction you are asking for; roll from one
+direction to the next without lifting, and hold as long as you like. Add
+`?pad` to the URL to force the touch controls on a laptop.
 
 Four players can share one keyboard: arrows, WASD, UHJK and the numpad.
