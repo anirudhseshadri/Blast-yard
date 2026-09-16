@@ -1,14 +1,17 @@
 /* The map list the lobby picker offers.
 
-   Adding a map is one file plus one line here. The format is still the simple
-   one the prototype needed; Task 3 in BRIEF.md replaces it with typed layouts,
-   tile themes, special tiles and per-map powerup weights. */
+   Adding a map is one file plus one line here. See legend.js for what each
+   character in a layout means.
 
+   Every map is read once on startup, so a mistyped layout fails loudly here
+   rather than halfway through a round. */
+
+import { checkMap } from './legend.js';
 import yard from './yard.js';
 import scrapheap from './scrapheap.js';
-import longyard from './longyard.js';
+import waterworks from './waterworks.js';
 
-export const MAPS = [yard, scrapheap, longyard];
+export const MAPS = [yard, scrapheap, waterworks].map(checkMap);
 export const DEFAULT_MAP = yard;
 
 export function mapById(id){

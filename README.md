@@ -43,7 +43,7 @@ that:
     src/input.js    keyboard and touch
     src/ui.js       menu and lobby screens
     src/constants.js  values shared by all of the above
-    src/maps/       one file per map, data only, plus index.js listing them
+    src/maps/       one file per map, data only. See src/maps/README.md
     server/         the game server. See server/README.md
 
 `game.js` holds the tuned numbers for movement, bomb timing and blasts. It
@@ -64,6 +64,20 @@ out after every change, so there is never a version only one person can see.
   is one tap. Wins are counted for the session only and are never stored.
 
 Four players to a room. A fifth is told the room is full.
+
+## Maps
+
+A map is a file of plain data, including the arena itself as a grid of
+characters you can type:
+
+```
+    '#1__.......__3#',
+    '#_#.#.#.#.#.#_#',
+```
+
+Three ship: The Yard (the original), Scrapheap (dense, fast) and Waterworks
+(water, conveyors, a teleport pair). Adding one is a new file plus a line in
+`src/maps/index.js`. `src/maps/README.md` has the full character list.
 
 ## Controls
 
