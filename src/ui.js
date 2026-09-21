@@ -105,6 +105,18 @@ export function renderLobby(state){
     nameInput.value = me.name;
   }
 
+  // The server is the one that runs the maps, so it decides what is on offer.
+  // Building the picker from its list means a server older than this page can
+  // never be asked for a map it does not have.
+  if(state.maps && state.maps.length){
+    const ids = state.maps.map(m=>m.id).join(',');
+    if(mapPick.dataset.ids !== ids){
+      mapPick.dataset.ids = ids;
+      mapPick.innerHTML = state.maps
+        .map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
+    }
+  }
+
   // the map, the round count and the start button belong to whoever made the room
   mapPick.value = state.mapId;
   mapPick.disabled = !iOwn;

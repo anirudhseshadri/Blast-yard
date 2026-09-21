@@ -6,7 +6,7 @@
    a `send` function per player and calls `tick` on a timer. */
 
 import { newGame, step, buildView } from '../src/game.js';
-import { mapById, DEFAULT_MAP } from '../src/maps/index.js';
+import { mapById, DEFAULT_MAP, MAPS } from '../src/maps/index.js';
 import { pack } from '../src/snapshot.js';
 
 export const MAX_PLAYERS = 4;
@@ -123,6 +123,8 @@ export function roomMessage(room, forPlayer){
     code: room.code,
     you: forPlayer ? forPlayer.slot : null,
     mapId: room.mapId,
+    // the server runs the maps, so it says which ones exist
+    maps: MAPS.map(m=>({ id:m.id, name:m.name })),
     bestOf: room.bestOf,
     phase: room.phase,
     players: room.players

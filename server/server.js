@@ -14,7 +14,7 @@ import {
   roomMessage, broadcastRoom, beginCountdown, canStart, tick,
   isExpired, needsTick, MAX_ROOMS, BEST_OF
 } from './rooms.js';
-import { mapById } from '../src/maps/index.js';
+import { MAPS } from '../src/maps/index.js';
 
 const PORT = process.env.PORT || 8080;
 const TICK_MS = 1000/30;            // 30 ticks a second
@@ -28,7 +28,10 @@ const server = http.createServer((req,res)=>{
   // a health check is all the plain HTTP this needs, so no Express
   if(req.url==='/health'){
     res.writeHead(200,{'content-type':'application/json'});
-    res.end(JSON.stringify({ ok:true, rooms:rooms.size, uptime:Math.round(process.uptime()) }));
+    res.end(JSON.stringify({
+      ok:true, rooms:rooms.size, uptime:Math.round(process.uptime()),
+      maps: MAPS.map(m=>m.id)
+    }));
     return;
   }
   res.writeHead(404); res.end('Blast Yard server. The game itself is served elsewhere.');
@@ -114,7 +117,14 @@ wss.on('connection',(ws, req)=>{
       case 'map': {
         if(!player || !player.owner) return;
         if(room.phase!=='lobby') return;
-        room.mapId = mapById(m.id).id;
+        // Say so rather than quietly substituting another map. A client newer
+        // than the server offers maps this server has never heard of, and
+        // silently swapping one in looks like the picker is simply broken.
+        const chosen = MAPS.find(x=>x.id===m.id);
+        if(!chosen){
+          return fail(`This server does not have a map called "${m.id}". It may need redeploying.`);
+        }
+        room.mapId = chosen.id;
         broadcastRoom(room);
         break;
       }

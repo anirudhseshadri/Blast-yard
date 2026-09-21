@@ -13,7 +13,14 @@ there is no database, and a restart clears every room.
     npm start
 
 It listens on port 8080 unless `PORT` says otherwise, and answers `GET /health`
-with a small JSON status.
+with a small JSON status, including the maps it has:
+
+    {"ok":true,"rooms":0,"uptime":42,"maps":["yard","scrapheap","waterworks"]}
+
+That map list is worth knowing about. The client deploys in seconds and the
+server takes a minute or two, so after adding a map there is a window where
+the page offers one the server has never heard of. Open `/health` to see what
+the running server actually has.
 
 Serve the game files separately, from the repository root:
 
@@ -76,7 +83,7 @@ Client to server:
 
 Server to client:
 
-    { t: "room", code, you, mapId, bestOf, phase,
+    { t: "room", code, you, mapId, maps, bestOf, phase,
       players: [{ slot, name, ready, owner, wins, matches }] }
     { t: "starting", inSeconds }
     { t: "snap", s: { ... } }
@@ -87,6 +94,10 @@ Server to client:
 `name`, `map` and `bestof` are additions to the list in MULTIPLAYER.md. The lobby already
 had a name field and a map picker, and the server owns lobby state now, so
 those two choices had to become messages.
+
+`maps` is the list of maps this server can actually run. The lobby picker is
+built from it, so a page newer than the server never offers a map the server
+would have to refuse.
 
 The snapshot sits in its own `s` field rather than being spread into the
 message, because the packed snapshot has a `t` of its own for the round clock
