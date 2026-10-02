@@ -164,7 +164,10 @@ function hintFor(){
 }
 
 function show(v){
-  render.draw(v, hintFor());
+  // online, the room knows what everyone typed; local play has no names
+  const names = [];
+  if(mode==='online' && room) room.players.forEach(p=>{ names[p.slot]=p.name; });
+  render.draw(v, hintFor(), names);
   const slot = mode==='local' ? 0 : mySlot;
   const me = v.players.find(p=>p.slot===slot);
   input.setKickVisible(!!(me && me.alive && me.kick));

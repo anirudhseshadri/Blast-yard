@@ -180,9 +180,17 @@ export function pickupIcon(type){
   return c;
 }
 
+/* Cut a name down with an ellipsis so it fits its slot in the HUD. */
+function fit(text, max){
+  if(ctx.measureText(text).width <= max) return text;
+  while(text.length > 1 && ctx.measureText(text+'…').width > max) text = text.slice(0,-1);
+  return text+'…';
+}
+
 /* `hint` is the line under the end-of-round message. The caller decides what
-   it says, because the renderer does not know whether this browser is hosting. */
-export function draw(v, hint=''){
+   it says, because the renderer does not know whether this browser is hosting.
+   `names` is indexed by slot. A slot with no name falls back to its colour. */
+export function draw(v, hint='', names=[]){
   if(!ctx) return;
   ctx.clearRect(0,0,W,H);
 
@@ -190,14 +198,19 @@ export function draw(v, hint=''){
   ctx.fillStyle='#161923'; ctx.fillRect(0,0,W,BAR);
   ctx.fillStyle='#0d0f16'; ctx.fillRect(0,BAR-2,W,2);
   v.players.forEach((p,i)=>{
-    const x=14+i*88;
+    const x=14+i*124;            // four slots, leaving room for the clock
     ctx.globalAlpha = p.alive?1:0.3;
     ctx.fillStyle=SLOT_COLOR[p.slot];
     ctx.beginPath(); ctx.arc(x,BAR/2,9,0,7); ctx.fill();
     ctx.globalAlpha=1;
     ctx.fillStyle = p.alive?'#c9d1e0':'#5a6274';
     ctx.font='14px system-ui,sans-serif';
-    ctx.fillText(p.alive?SLOT_NAME[p.slot]:'out', x+15, BAR/2+5);
+    // the name stays up when a player is out, dimmed and struck through
+    const label = fit(names[p.slot] || SLOT_NAME[p.slot], 96);
+    ctx.fillText(label, x+15, BAR/2+5);
+    if(!p.alive){
+      ctx.fillRect(x+15, BAR/2, ctx.measureText(label).width, 1.5);
+    }
   });
   const t=Math.ceil(v.time);
   ctx.font='bold 20px ui-monospace,Menlo,monospace';
