@@ -166,6 +166,20 @@ function drawPickup(p){
   ctx.restore();
 }
 
+/* One powerup icon on its own little canvas, for the how to play screen. It
+   borrows the board's drawing code so the guide shows exactly what you will
+   find in the yard. */
+export function pickupIcon(type){
+  const c = document.createElement('canvas');
+  c.width = c.height = TS;
+  const board = ctx;
+  ctx = c.getContext('2d');
+  ctx.translate(0, -BAR);                  // drawPickup adds the HUD height
+  drawPickup({r:0, c:0, type});
+  ctx = board;
+  return c;
+}
+
 /* `hint` is the line under the end-of-round message. The caller decides what
    it says, because the renderer does not know whether this browser is hosting. */
 export function draw(v, hint=''){
@@ -275,6 +289,7 @@ export function smooth(lerpView, view, dt){
     if(!l){ lerpView.players[i]={...p}; return; }
     l.x+=(p.x-l.x)*k; l.y+=(p.y-l.y)*k;
     l.alive=p.alive; l.shield=p.shield; l.curse=p.curse; l.slot=p.slot; l.kick=p.kick;
+    l.bombs=p.bombs; l.range=p.range; l.speed=p.speed; l.fuse=p.fuse;
   });
   lerpView.players.length=view.players.length;
   return lerpView;

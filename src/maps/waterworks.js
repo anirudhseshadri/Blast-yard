@@ -38,7 +38,7 @@ export default {
     '###############'
   ],
 
-  softDensity: 0.22,        // the specials are the point, so keep sight lines
+  softDensity: 0.4,         // the specials are the point, so keep some sight lines
   pickupChance: 0.55,
 
   powerups: { bomb:20, range:20, speed:18, shield:10, kick:14, fuse:8, skull:6, random:4 },

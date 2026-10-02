@@ -19,7 +19,9 @@ import { MAPS } from '../src/maps/index.js';
 const PORT = process.env.PORT || 8080;
 const TICK_MS = 1000/30;            // 30 ticks a second
 const SWEEP_MS = 10000;             // how often dead rooms are cleared out
-const CREATE_COOLDOWN_MS = 10000;   // one new room per address per 10 seconds
+// Short, because phones on mobile data often share one public address with
+// thousands of strangers, and a long wait looks like a broken button.
+const CREATE_COOLDOWN_MS = 3000;    // one new room per address per 3 seconds
 
 const rooms = new Map();            // code -> room
 const lastCreate = new Map();       // address -> timestamp
@@ -71,7 +73,7 @@ wss.on('connection',(ws, req)=>{
         if(room) return fail('You are already in a room.');
         const since = Date.now() - (lastCreate.get(address) || 0);
         if(since < CREATE_COOLDOWN_MS){
-          return fail('Give it a moment before making another room.');
+          return fail('A room was just made from this connection. Try again in a few seconds.');
         }
         if(rooms.size >= MAX_ROOMS) return fail('The server is full. Try again shortly.');
 

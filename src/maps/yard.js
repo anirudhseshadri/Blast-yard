@@ -35,7 +35,7 @@ export default {
     '###############'
   ],
 
-  softDensity: 0.26,        // chance a free tile becomes a soft block
+  softDensity: 0.5,         // chance a free tile becomes a soft block
   pickupChance: 0.45,       // chance a soft block hides a powerup
 
   // how often each powerup comes up on this map, relative to the others

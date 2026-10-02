@@ -9,15 +9,31 @@
 
 import { SLOT_COLOR, SLOT_NAME } from './constants.js';
 import { MAPS } from './maps/index.js';
+import { pickupIcon } from './render.js';
 
 const el = id => document.getElementById(id);
 const NAME_KEY = 'blastyard.name';
+const HELP_KEY = 'blastyard.seenHelp';
+
+/* What each powerup does, in the order the guide lists them. These describe
+   the rules in game.js `grant`; change one and change the other. */
+const POWERUPS = [
+  ['bomb',   'Extra bomb',   'Have one more bomb out at a time. Up to 4.'],
+  ['range',  'Bigger blast', 'Your blast reaches one tile further. Up to 8.'],
+  ['speed',  'Speed',        'Walk faster. Stacks three times.'],
+  ['shield', 'Shield',       'Survive one blast. The ring around you shows it is on.'],
+  ['kick',   'Kick',         'Walk into a bomb and press kick to send it sliding until it hits something.'],
+  ['fuse',   'Short fuse',   'Your bombs go off sooner, so they are harder to dodge. Watch yourself too.'],
+  ['skull',  'Curse',        'Bad one. Your controls are reversed for 8 seconds. Purple border means avoid it.'],
+  ['random', 'Mystery',      'Usually a random good power-up. About one time in seven it wipes everything you have collected.']
+];
 
 let menu, lobby, roomCodeEl, playerList, lobbyTitle, lobbySub, lobbyNote;
 let btnStart, btnReady, menuNote, nameInput, mapPick, bestPick, netStatus;
 let scoreboard, sbTitle, sbSub, sbList, sbNext;
+let help, statsEl, btnCancel, menuButtons, lastStats = '';
 
-export function init({ onLocal, onCreate, onJoin, onStart, onReady, onName, onMap, onBestOf, onLeave }){
+export function init({ onLocal, onCreate, onJoin, onCancel, onStart, onReady, onName, onMap, onBestOf, onLeave }){
   menu=el('menu'); lobby=el('lobby');
   roomCodeEl=el('roomCode'); playerList=el('playerList');
   lobbyTitle=el('lobbyTitle'); lobbySub=el('lobbySub'); lobbyNote=el('lobbyNote');
@@ -26,14 +42,36 @@ export function init({ onLocal, onCreate, onJoin, onStart, onReady, onName, onMa
   netStatus=el('netStatus');
   scoreboard=el('scoreboard'); sbTitle=el('sbTitle'); sbSub=el('sbSub');
   sbList=el('sbList'); sbNext=el('sbNext');
+  help=el('help'); statsEl=el('stats'); btnCancel=el('btnCancel');
+  menuButtons=[el('btnLocal'), el('btnHost'), el('btnJoin'), el('joinCode')];
 
   el('btnLocal').onclick  = onLocal;
   el('btnHost').onclick   = onCreate;
-  el('btnJoin').onclick   = ()=>{
+  const join = ()=>{
     const code = el('joinCode').value.trim().toUpperCase();
     if(code.length<3){ setNote('Enter the 5 letter code you were given.'); return; }
     onJoin(code);
   };
+  el('btnJoin').onclick = join;
+  el('joinCode').onkeydown = e=>{ if(e.key==='Enter') join(); };
+  btnCancel.onclick = onCancel;
+
+  // the guide: the icons are drawn by the same code that draws the board
+  const list = el('puList');
+  POWERUPS.forEach(([type, name, text])=>{
+    const dt = document.createElement('dt');
+    dt.appendChild(pickupIcon(type));
+    const dd = document.createElement('dd');
+    if(type==='skull') dd.className = 'bad';
+    dd.innerHTML = `<b>${name}.</b> ${text}`;
+    list.append(dt, dd);
+  });
+  el('btnHelp').onclick = showHelp;
+  el('btnHelp2').onclick = showHelp;
+  el('btnHelpClose').onclick = hideHelp;
+  // first visit on this device: open the guide before anything else
+  if(!seenHelp()) showHelp();
+  sync();
   el('btnCopy').onclick  = ()=>navigator.clipboard?.writeText(roomCodeEl.textContent);
   el('btnLeave').onclick = onLeave;
   btnStart.onclick = onStart;
@@ -59,12 +97,64 @@ function saveName(name){
   try { localStorage.setItem(NAME_KEY, name); } catch { /* private mode, no matter */ }
 }
 
-export function setNote(text){ menuNote.textContent = text; }
-export function hideMenu(){ menu.classList.add('hide'); }
-export function showMenu(){ menu.classList.remove('hide'); lobby.classList.add('hide'); }
-export function showLobby(){ menu.classList.add('hide'); lobby.classList.remove('hide'); }
-export function hideLobby(){ lobby.classList.add('hide'); }
-export function hideScoreboard(){ scoreboard.classList.add('hide'); }
+function seenHelp(){
+  try { return !!localStorage.getItem(HELP_KEY); } catch { return false; }
+}
+export function showHelp(){ help.classList.remove('hide'); help.scrollTop = 0; sync(); }
+function hideHelp(){
+  help.classList.add('hide');
+  try { localStorage.setItem(HELP_KEY, '1'); } catch { /* private mode, no matter */ }
+  sync();
+}
+
+/* While any screen is up, the touch pad and the stats line hide, so a thumb
+   on the menu can never land on the stick underneath it. */
+function sync(){
+  const open = [menu, lobby, scoreboard, help].some(p=>!p.classList.contains('hide'));
+  document.body.classList.toggle('menu-open', open);
+}
+
+export function setNote(text){ menuNote.textContent = text; menuNote.classList.remove('busy'); }
+
+/* Connecting to the server, which can take up to a minute if it was asleep.
+   The buttons lock so a second tap cannot get lost, and the note says what
+   is happening instead of the screen looking frozen. */
+export function setConnecting(text){
+  const busy = !!text;
+  menuButtons.forEach(b=>{ b.disabled = busy; });
+  btnCancel.classList.toggle('hide', !busy);
+  if(busy){ menuNote.textContent = text; menuNote.classList.add('busy'); }
+  else menuNote.classList.remove('busy');
+}
+
+export function hideMenu(){ menu.classList.add('hide'); sync(); }
+export function showMenu(){ setConnecting(''); menu.classList.remove('hide'); lobby.classList.add('hide'); scoreboard.classList.add('hide'); sync(); }
+export function showLobby(){ setConnecting(''); menu.classList.add('hide'); lobby.classList.remove('hide'); sync(); }
+export function hideLobby(){ lobby.classList.add('hide'); sync(); }
+export function hideScoreboard(){ scoreboard.classList.add('hide'); sync(); }
+
+/* The line under the board: what this player is carrying right now. */
+export function setStats(p, label){
+  let html = '';
+  if(p && p.alive && p.bombs!=null){
+    const chips = [
+      `<span class="who">${esc(label)}</span>`,
+      `<span>Bombs ${p.bombs}</span>`,
+      `<span>Blast ${p.range}</span>`,
+      p.speed ? `<span class="good">Speed +${p.speed}</span>` : '',
+      p.fuse < 2.6 ? `<span class="good">Fuse ${p.fuse.toFixed(1)}s</span>` : '',
+      p.kick ? '<span class="good">Kick</span>' : '',
+      p.shield ? '<span class="good">Shield</span>' : '',
+      p.curse ? '<span class="bad">Reversed</span>' : ''
+    ];
+    html = chips.join('');
+  }else if(p && !p.alive){
+    html = `<span class="who">${esc(label)}</span><span>Out this round</span>`;
+  }
+  if(html === lastStats) return;     // runs every frame, so only touch the DOM on a change
+  lastStats = html;
+  statsEl.innerHTML = html;
+}
 
 /* A line across the top of the board for anything about the connection:
    waking the server, reconnecting, counting down to the start. */
@@ -137,6 +227,7 @@ export function showScoreboard(end, mySlot){
   menu.classList.add('hide');
   lobby.classList.add('hide');
   scoreboard.classList.remove('hide');
+  sync();
 
   sbTitle.textContent = end.matchOver
     ? `${end.champion || SLOT_NAME[end.championSlot]} wins the match`
