@@ -59,7 +59,7 @@ theme: { floorA, floorB, wall, wallTop, wallLip, crate, crateTop, crateLine }
 Tile colours. Anything left out falls back to The Yard's.
 
 ```js
-softDensity: 0.26      // chance a '.' tile grows a crate
+softDensity: 0.5       // chance a '.' tile grows a crate
 pickupChance: 0.45     // chance a crate hides a powerup
 ```
 

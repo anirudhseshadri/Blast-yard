@@ -14,7 +14,9 @@ import { COLS, ROWS, PU } from './constants.js';
 export function pack(v){
   return {
     g:v.grid.map(row=>row.join('')).join(''),
-    p:v.players.map(p=>[p.slot, Math.round(p.x), Math.round(p.y), p.alive?1:0, p.shield?1:0, p.curse?1:0, p.kick?1:0]),
+    // the last four are the powerup levels, so each player can see what they carry
+    p:v.players.map(p=>[p.slot, Math.round(p.x), Math.round(p.y), p.alive?1:0, p.shield?1:0, p.curse?1:0, p.kick?1:0,
+                        p.bombs, p.range, p.speed, Math.round(p.fuse*10)]),
     b:v.bombs.map(b=>[Math.round(b.x),Math.round(b.y)]),
     f:v.flames.map(f=>[f.r,f.c]),
     u:v.pickups.map(p=>[p.r,p.c,PU.indexOf(p.type)]),
@@ -30,7 +32,9 @@ export function unpack(d){
   }
   return {
     grid,
-    players:d.p.map(a=>({slot:a[0],x:a[1],y:a[2],alive:!!a[3],shield:!!a[4],curse:!!a[5],kick:!!a[6]})),
+    // a server older than this page sends no powerup levels, so they stay null
+    players:d.p.map(a=>({slot:a[0],x:a[1],y:a[2],alive:!!a[3],shield:!!a[4],curse:!!a[5],kick:!!a[6],
+                         bombs:a[7]??null, range:a[8]??null, speed:a[9]??null, fuse:a[10]!=null?a[10]/10:null})),
     bombs:d.b.map(a=>({x:a[0],y:a[1]})),
     flames:d.f.map(a=>({r:a[0],c:a[1]})),
     pickups:d.u.map(a=>({r:a[0],c:a[1],type:PU[a[2]]})),

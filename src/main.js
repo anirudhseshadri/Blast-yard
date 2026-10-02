@@ -14,6 +14,7 @@ import * as input from './input.js';
 import * as ui from './ui.js';
 import { connect } from './net.js';
 import { mapById, DEFAULT_MAP } from './maps/index.js';
+import { SLOT_NAME } from './constants.js';
 
 let G = null;          // local play only: the simulation lives here
 let mode = 'menu';     // menu | local | online
@@ -45,6 +46,13 @@ ui.init({
   },
   onCreate(){ goOnline(n=>n.create(ui.loadName())); },
   onJoin(code){ goOnline(n=>n.join(code, ui.loadName())); },
+  onCancel(){
+    if(net){ net.close(); net=null; }
+    mode='menu'; room=null;
+    ui.setStatus('');
+    ui.setConnecting('');
+    ui.setNote('Cancelled. Tap again whenever you are ready.');
+  },
   onName(name){ if(net) net.setName(name); },
   onReady(){ if(net) net.setReady(!amReady()); },
   onMap(id){ if(net) net.setMap(id); },
@@ -67,7 +75,7 @@ function amReady(){
 function goOnline(action){
   if(net) return;
   mode='online';
-  ui.setNote('Reaching the server...');
+  ui.setConnecting('Reaching the server...');
 
   net = connect({
     onOpen(){ ui.setStatus(''); },
@@ -133,7 +141,10 @@ function goOnline(action){
       ui.setNote(reason);
       if(!room){ mode='menu'; net.close(); net=null; ui.showMenu(); }
     },
-    onWaking(){ ui.setStatus('Waking up the server, this can take a minute...'); },
+    onWaking(){
+      ui.setStatus('Waking up the server...');
+      ui.setConnecting('Waking up the server. It sleeps when nobody is playing, so this can take up to a minute. Keep this screen open.');
+    },
     onReconnecting(){ ui.setStatus('Reconnecting...'); },
     onLost(reason){
       ui.setStatus('');
@@ -157,6 +168,8 @@ function show(v){
   const slot = mode==='local' ? 0 : mySlot;
   const me = v.players.find(p=>p.slot===slot);
   input.setKickVisible(!!(me && me.alive && me.kick));
+  const mine = mode==='online' && room ? room.players.find(p=>p.slot===slot) : null;
+  ui.setStats(me, ((mine && mine.name) || SLOT_NAME[slot]) + (mode==='online' ? ' (you)' : ''));
 }
 
 let last=performance.now();

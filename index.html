@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12141b">
 <title>Blast Yard</title>
 <style>
   :root{
@@ -15,18 +16,23 @@
     --paper:#e8e4d9;
   }
   *{box-sizing:border-box}
-  html,body{height:100%}
+  html,body{min-height:100%}
+  /* The page is centred with margin:auto rather than flex centring. Flex
+     centring pushes anything taller than the screen off the top, where no
+     amount of scrolling reaches it, which is what hid the menu on phones. */
   body{
-    margin:0;
+    margin:0;min-height:100vh;min-height:100dvh;
     background:
-      radial-gradient(120% 80% at 50% -10%, #3a4152 0%, #1a1d26 60%, #12141b 100%);
+      radial-gradient(120% 80% at 50% -10%, #3a4152 0%, #1a1d26 60%, #12141b 100%) fixed,
+      #12141b;
     color:var(--paper);
     font-family:"Rockwell","Bookman Old Style",Georgia,serif;
-    display:flex;align-items:center;justify-content:center;
-    padding:12px;
+    display:flex;
+    padding:max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+            max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   }
-  #wrap{width:100%;max-width:860px}
-  #stage{position:relative;width:100%}
+  #wrap{width:100%;max-width:860px;margin:auto}
+  #stage{position:relative;width:100%;margin:0 auto}
   canvas{
     width:100%;height:auto;display:block;
     image-rendering:auto;
@@ -35,18 +41,24 @@
     box-shadow:0 18px 40px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.06);
     background:#1b1e27;
   }
+  /* Menus cover the whole screen, not just the board, and scroll when they
+     are taller than it. On a phone the board is too small to hold them. */
   .panel{
-    position:absolute;inset:0;
-    display:flex;align-items:center;justify-content:center;
-    background:rgba(12,14,20,.86);
-    border-radius:6px;
+    position:fixed;top:0;right:0;bottom:0;left:0;z-index:10;
+    display:flex;
+    overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+    padding:max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+    background:rgba(10,12,18,.84);
+    -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
   }
+  #help{z-index:15}
   .card{
-    width:min(520px,92%);
-    background:#1f2330;
+    width:100%;max-width:520px;margin:auto;
+    background:linear-gradient(180deg,#232838 0%,#1d2130 100%);
     border:2px solid #3c4356;
-    border-radius:8px;
-    padding:22px 24px;
+    border-radius:12px;
+    padding:22px 22px 18px;
+    box-shadow:0 20px 50px rgba(0,0,0,.5);
   }
   h1{
     margin:0 0 2px;
@@ -57,19 +69,35 @@
   .sub{margin:0 0 18px;font-size:14px;color:#9aa3b8;font-family:system-ui,sans-serif}
   button{
     font:inherit;font-size:16px;
-    background:#ffcf6b;color:#20160a;border:none;border-radius:5px;
-    padding:11px 16px;cursor:pointer;
+    background:#ffcf6b;color:#20160a;border:none;border-radius:8px;
+    padding:12px 16px;min-height:48px;cursor:pointer;
+    box-shadow:0 3px 0 #a7781f;
+    touch-action:manipulation;-webkit-tap-highlight-color:transparent;
   }
-  button.ghost{background:#2c3244;color:var(--paper);border:1px solid #454d63}
+  button:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 #a7781f}
+  button.ghost{background:#2c3244;color:var(--paper);border:1px solid #454d63;box-shadow:0 3px 0 #161922}
+  button.ghost:active:not(:disabled){box-shadow:0 1px 0 #161922}
+  button.link{background:none;box-shadow:none;border:none;color:#7fd1ff;min-height:0;padding:6px 0;
+    font-family:system-ui,sans-serif;font-size:14px;text-decoration:underline;text-underline-offset:3px}
   button:disabled{opacity:.45;cursor:default}
   button:focus-visible{outline:3px solid #7fd1ff;outline-offset:2px}
   .row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .row > button{flex:1 1 180px}
+  .stack{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+  .divider{display:flex;align-items:center;gap:10px;margin:6px 0 12px;
+    font-family:system-ui,sans-serif;font-size:12px;color:#6c7590;text-transform:uppercase;letter-spacing:1px}
+  .divider::before,.divider::after{content:"";flex:1;height:1px;background:#353c50}
   input{
-    font:inherit;font-size:16px;text-transform:uppercase;letter-spacing:2px;
-    background:#151822;color:var(--paper);border:1px solid #454d63;border-radius:5px;
-    padding:10px 12px;width:150px;
+    font:inherit;font-size:16px;text-transform:uppercase;letter-spacing:3px;
+    background:#151822;color:var(--paper);border:1px solid #454d63;border-radius:8px;
+    padding:11px 12px;min-height:48px;width:150px;flex:1 1 120px;
   }
-  .note{font-family:system-ui,sans-serif;font-size:13px;color:#9aa3b8;line-height:1.5}
+  .note{font-family:system-ui,sans-serif;font-size:13px;color:#9aa3b8;line-height:1.5;margin:10px 0 0}
+  .note.busy{color:#ffcf6b}
+  .note.busy::before{content:"";display:inline-block;width:10px;height:10px;margin-right:8px;
+    border:2px solid #ffcf6b;border-right-color:transparent;border-radius:50%;
+    vertical-align:-1px;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
   .code{
     font-family:ui-monospace,Menlo,Consolas,monospace;font-size:26px;letter-spacing:6px;
     color:#7fd1ff;background:#151822;border:1px dashed #3c4356;border-radius:5px;
@@ -123,11 +151,37 @@
 
   /* connection news: waking the server, reconnecting, counting down */
   #netStatus{
-    position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    position:fixed;top:max(10px, env(safe-area-inset-top));left:50%;transform:translateX(-50%);
+    max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis;
     background:#1f2330;border:1px solid #454d63;border-radius:99px;
     padding:6px 16px;font-family:system-ui,sans-serif;font-size:13px;
-    color:#ffcf6b;white-space:nowrap;pointer-events:none;z-index:5;
+    color:#ffcf6b;white-space:nowrap;pointer-events:none;z-index:20;
   }
+
+  /* how to play */
+  .help h2{font-size:17px;color:#ffcf6b;margin:18px 0 8px}
+  .help p,.help li{font-family:system-ui,sans-serif;font-size:14px;line-height:1.5;color:#c9d1e0}
+  .help p{margin:0 0 8px}
+  .help ul{margin:0;padding-left:18px;color:#c9d1e0}
+  .help kbd{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#151822;
+    border:1px solid #454d63;border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--paper)}
+  .pu{display:grid;grid-template-columns:40px 1fr;gap:4px 12px;align-items:center;margin:0}
+  .pu canvas{width:40px;height:40px;border:none;box-shadow:none;border-radius:8px;background:#1b1e27}
+  .pu dt{grid-column:1}
+  .pu dd{margin:0;font-family:system-ui,sans-serif;font-size:14px;line-height:1.4;color:#c9d1e0}
+  .pu dd b{color:var(--paper)}
+  .pu dd.bad b{color:#d9a6ff}
+  .help .sticky{position:sticky;bottom:-18px;margin:16px -22px -18px;padding:12px 22px 16px;
+    background:linear-gradient(180deg,rgba(29,33,48,0) 0%,#1d2130 30%)}
+  .help .sticky button{width:100%}
+
+  /* what you are carrying, under the board */
+  #stats{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:8px;min-height:26px;
+    font-family:system-ui,sans-serif;font-size:13px}
+  #stats span{background:#1f2330;border:1px solid #3c4356;border-radius:99px;padding:3px 10px;color:#c9d1e0}
+  #stats span.good{border-color:#29506a;color:#7fd1ff}
+  #stats span.bad{border-color:#5d3a78;color:#d9a6ff}
+  #stats .who{border:none;background:none;padding-left:0;font-weight:600}
 
   /* touch controls */
 
@@ -148,6 +202,22 @@
 
   #pad{display:none;margin-top:14px;justify-content:space-between;align-items:center;gap:16px}
   body.touch #pad{display:flex}
+  body.menu-open #pad, body.menu-open #stats{visibility:hidden}
+
+  /* A phone on its side: board in the middle, stick on the left, buttons on
+     the right, and the board sized so the whole of it fits on screen. */
+  @media (orientation:landscape) and (max-height:560px){
+    body.touch #wrap{
+      max-width:none;display:grid;align-items:center;gap:12px;
+      grid-template-columns:auto 1fr auto;grid-template-areas:"stick stage actions" "stick stats actions";
+    }
+    body.touch #stage{grid-area:stage;width:min(100%, calc((100vh - 60px) * 600 / 560));
+      width:min(100%, calc((100dvh - 60px) * 600 / 560))}
+    body.touch #stats{grid-area:stats;margin-top:0}
+    body.touch #pad{display:contents}
+    body.touch #stick{grid-area:stick}
+    body.touch #actions{grid-area:actions}
+  }
 
   /* a four way stick: your thumb goes anywhere on the base and the knob
      snaps to the gate you are asking for */
@@ -204,13 +274,20 @@
       <div class="card">
         <h1>Blast Yard</h1>
         <p class="sub">Drop bombs. Outlive everyone. The yard closes in when the clock runs out.</p>
-        <div class="row">
-          <button id="btnLocal">Play on one keyboard</button>
-          <button id="btnHost" class="ghost">Create an online room</button>
+        <div class="stack">
+          <button id="btnHost">Create an online room</button>
         </div>
         <div class="row">
-          <input id="joinCode" placeholder="CODE" maxlength="5">
+          <input id="joinCode" placeholder="CODE" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
           <button id="btnJoin" class="ghost">Join with code</button>
+        </div>
+        <div class="divider">or</div>
+        <div class="stack">
+          <button id="btnLocal" class="ghost">Play on one keyboard</button>
+        </div>
+        <div class="row" style="justify-content:space-between;align-items:center;margin:0">
+          <button id="btnHelp" class="link">How to play and what the power-ups do</button>
+          <button id="btnCancel" class="link hide">Cancel</button>
         </div>
         <p class="note" id="menuNote">Online games run on a shared server, so it does not matter whose tab stays open.</p>
       </div>
@@ -242,6 +319,7 @@
           <button id="btnLeave" class="ghost">Leave</button>
         </div>
         <p class="waiting" id="lobbyNote"></p>
+        <button id="btnHelp2" class="link">How to play</button>
       </div>
     </div>
 
@@ -253,7 +331,48 @@
         <p class="waiting" id="sbNext"></p>
       </div>
     </div>
+    <div class="panel hide" id="help">
+      <div class="card help">
+        <h1>How to play</h1>
+        <p class="sub">Last one standing wins the round. Win enough rounds to win the match.</p>
+
+        <h2>The basics</h2>
+        <ul>
+          <li>Drop a bomb. After about two and a half seconds it blows up in a cross.</li>
+          <li>The blast breaks crates and stops at walls. Anyone caught in it is out, you included.</li>
+          <li>Some crates hide a power-up. Break the crate, then walk over the power-up to take it.</li>
+          <li>A blast also destroys any power-up lying in its path.</li>
+          <li>One bomb can set off another, so chains are a good trap.</li>
+        </ul>
+
+        <h2>Controls</h2>
+        <ul>
+          <li><b>Phone:</b> drag the stick to move, tap <b>Bomb</b>. A <b>Kick</b> button appears once you have kick.</li>
+          <li><b>Online on a keyboard:</b> arrows or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, <kbd>Space</kbd> for a bomb, <kbd>K</kbd> to kick.</li>
+          <li><b>One keyboard, four players:</b> arrows + <kbd>Enter</kbd>/<kbd>Right Shift</kbd>, <kbd>WASD</kbd> + <kbd>Q</kbd>/<kbd>E</kbd>, <kbd>UHJK</kbd> + <kbd>N</kbd>/<kbd>M</kbd>, number pad <kbd>8456</kbd> + <kbd>.</kbd>/<kbd>0</kbd>. Press <kbd>R</kbd> for another round.</li>
+        </ul>
+
+        <h2>Power-ups</h2>
+        <p>They last for the rest of the round and stack. Everything resets at the start of the next round. What you are carrying shows under the board.</p>
+        <dl class="pu" id="puList"></dl>
+
+        <h2>Special tiles</h2>
+        <ul>
+          <li><b>Water:</b> you can walk through it, but you cannot drop a bomb on it and blasts stop at its edge.</li>
+          <li><b>Conveyor:</b> the arrows push you along. You can still walk against it, slowly.</li>
+          <li><b>Teleport pad:</b> step on one and you come out of its partner.</li>
+        </ul>
+
+        <h2>When the clock runs out</h2>
+        <p>Nobody wins on time. The timer turns to <b style="color:#ff6b6b">CLOSING</b> and walls start filling the yard in a spiral, from the outside edge towards the middle. Anyone standing where a wall lands is out.</p>
+        <p>Keep moving towards the centre. The walls keep coming until one player is left, so every round ends with a winner, unless the last players go out at the same moment. That is a draw and nobody gets the point.</p>
+
+        <div class="sticky"><button id="btnHelpClose">Got it</button></div>
+      </div>
+    </div>
   </div>
+
+  <div id="stats"></div>
 
   <div id="pad">
     <div id="stick">

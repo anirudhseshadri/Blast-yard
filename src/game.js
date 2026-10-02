@@ -341,7 +341,8 @@ function displayName(p){
 export function buildView(G){
   return {
     grid:G.grid,
-    players:G.players.map(p=>({slot:p.slot,x:p.x,y:p.y,alive:p.alive,shield:p.shield||p.inv>0,curse:p.curse>0,kick:p.kick})),
+    players:G.players.map(p=>({slot:p.slot,x:p.x,y:p.y,alive:p.alive,shield:p.shield||p.inv>0,curse:p.curse>0,kick:p.kick,
+      bombs:p.maxBombs,range:p.range,speed:p.speedLv,fuse:p.fuse})),
     bombs:G.bombs.map(b=>({x:b.x,y:b.y,fuse:b.fuse})),
     flames:G.flames.map(f=>({r:f.r,c:f.c})),
     pickups:[...G.pickups].filter(([,v])=>!v.hidden).map(([k,v])=>{

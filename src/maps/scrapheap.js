@@ -32,7 +32,7 @@ export default {
     '###############'
   ],
 
-  softDensity: 0.42,        // a lot more crates to dig through
+  softDensity: 0.65,        // a lot more crates to dig through
   pickupChance: 0.5,        // so a few more of them hide something
 
   // a scrapheap turns up more bombs and more junk, and fewer clean upgrades

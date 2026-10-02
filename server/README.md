@@ -62,7 +62,7 @@ These are deliberate and all live in `rooms.js` and `server.js`:
 | --- | --- |
 | Players per room | 4 |
 | Rooms on the server | 50 |
-| New rooms per address | one per 10 seconds |
+| New rooms per address | one per 3 seconds |
 | Idle room lifetime | 60 seconds after the last player leaves |
 | Tick rate | 30 a second |
 | Snapshot rate | 20 a second |
