@@ -151,6 +151,16 @@
   .pip.won{border-color:transparent}
   #sbTitle{font-size:26px}
 
+  /* end of match awards */
+  #sbAwards h2{font-size:17px;color:#ffcf6b;margin:16px 0 8px}
+  .award{display:flex;gap:10px;align-items:center;padding:9px 10px;margin-bottom:6px;
+    background:#191d28;border:1px solid #2f3648;border-radius:6px;font-family:system-ui,sans-serif}
+  .award .medal{font-size:22px;line-height:1}
+  .award b{display:block;color:var(--paper);font-size:14px}
+  .award span{color:#9aa3b8;font-size:13px}
+
+  button.wa{background:#25d366;color:#08240f;box-shadow:0 3px 0 #168a40}
+
   /* connection news: waking the server, reconnecting, counting down */
   #netStatus{
     position:fixed;top:max(10px, env(safe-area-inset-top));left:50%;transform:translateX(-50%);
@@ -298,8 +308,12 @@
     <div class="panel hide" id="lobby">
       <div class="card">
         <h1 id="lobbyTitle">Room open</h1>
-        <p class="sub" id="lobbySub">Send this code to your cousins.</p>
+        <p class="sub" id="lobbySub">Invite friends on WhatsApp, or share the code.</p>
         <div class="code" id="roomCode">-----</div>
+        <div class="row">
+          <button id="btnWhatsApp" class="wa">Invite on WhatsApp</button>
+          <button id="btnCopy" class="ghost">Copy invite link</button>
+        </div>
         <div class="row">
           <input id="nameInput" class="name" placeholder="Your name" maxlength="12">
           <button id="btnReady">Tap when you're ready</button>
@@ -318,7 +332,6 @@
         <ul id="playerList"></ul>
         <div class="row" style="margin-top:12px">
           <button id="btnStart">Start match</button>
-          <button id="btnCopy" class="ghost">Copy code</button>
           <button id="btnLeave" class="ghost">Leave</button>
         </div>
         <button id="btnHelp2" class="link">How to play</button>
@@ -330,6 +343,7 @@
         <h1 id="sbTitle">Round over</h1>
         <p class="sub" id="sbSub"></p>
         <ul id="sbList"></ul>
+        <div id="sbAwards" class="hide"></div>
         <p class="waiting" id="sbNext"></p>
       </div>
     </div>
@@ -363,6 +377,10 @@
           <li><b>Water:</b> you can walk through it, but you cannot drop a bomb on it and blasts stop at its edge.</li>
           <li><b>Conveyor:</b> the arrows push you along. You can still walk against it, slowly.</li>
           <li><b>Teleport pad:</b> step on one and you come out of its partner.</li>
+          <li><b>Ice:</b> once you step on, you slide in a straight line until you hit something or reach solid ground. You can't steer mid-slide.</li>
+          <li><b>Hole:</b> nobody can walk into one, but blasts fly straight over. Kick a bomb into a hole and it's gone.</li>
+          <li><b>Tunnel:</b> walk through it and other players can't see you. Your bombs still show, so they can guess.</li>
+          <li><b>Brick:</b> like a wall. Bombs can't break it and blasts stop at it.</li>
         </ul>
 
         <h2>When the clock runs out</h2>

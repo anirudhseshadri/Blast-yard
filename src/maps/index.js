@@ -10,8 +10,10 @@ import { checkMap } from './legend.js';
 import yard from './yard.js';
 import scrapheap from './scrapheap.js';
 import waterworks from './waterworks.js';
+import frozenpond from './frozenpond.js';
+import mineshaft from './mineshaft.js';
 
-export const MAPS = [yard, scrapheap, waterworks].map(checkMap);
+export const MAPS = [yard, scrapheap, waterworks, frozenpond, mineshaft].map(checkMap);
 export const DEFAULT_MAP = yard;
 
 export function mapById(id){

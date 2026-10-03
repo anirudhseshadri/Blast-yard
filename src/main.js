@@ -167,7 +167,7 @@ function show(v){
   // online, the room knows what everyone typed; local play has no names
   const names = [];
   if(mode==='online' && room) room.players.forEach(p=>{ names[p.slot]=p.name; });
-  render.draw(v, hintFor(), names);
+  render.draw(v, hintFor(), names, mode==='online' ? mySlot : -1);
   const slot = mode==='local' ? 0 : mySlot;
   const me = v.players.find(p=>p.slot===slot);
   input.setKickVisible(!!(me && me.alive && me.kick));
@@ -193,6 +193,16 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// Opened from an invite link: join that room straight away, then tidy the
+// address so a reload later does not try to rejoin a room that has closed.
+const invited = ui.invitedCode();
+if(invited){
+  const url = new URL(location.href);
+  url.searchParams.delete('room');
+  history.replaceState(null, '', url);
+  goOnline(n=>n.join(invited, ui.loadName()));
+}
 
 // idle art so the canvas is not blank behind the menu
 render.draw(idleView());

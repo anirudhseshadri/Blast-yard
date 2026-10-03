@@ -30,7 +30,7 @@ const POWERUPS = [
 
 let menu, lobby, roomCodeEl, playerList, lobbyTitle, lobbySub, lobbyNote;
 let btnStart, btnReady, menuNote, nameInput, mapPick, bestPick, netStatus;
-let scoreboard, sbTitle, sbSub, sbList, sbNext;
+let scoreboard, sbTitle, sbSub, sbList, sbNext, sbAwards;
 let help, statsEl, btnCancel, menuButtons, lastStats = '';
 
 export function init({ onLocal, onCreate, onJoin, onCancel, onStart, onReady, onName, onMap, onBestOf, onLeave }){
@@ -41,7 +41,7 @@ export function init({ onLocal, onCreate, onJoin, onCancel, onStart, onReady, on
   nameInput=el('nameInput'); mapPick=el('mapPick'); bestPick=el('bestPick');
   netStatus=el('netStatus');
   scoreboard=el('scoreboard'); sbTitle=el('sbTitle'); sbSub=el('sbSub');
-  sbList=el('sbList'); sbNext=el('sbNext');
+  sbList=el('sbList'); sbNext=el('sbNext'); sbAwards=el('sbAwards');
   help=el('help'); statsEl=el('stats'); btnCancel=el('btnCancel');
   menuButtons=[el('btnLocal'), el('btnHost'), el('btnJoin'), el('joinCode')];
 
@@ -70,9 +70,22 @@ export function init({ onLocal, onCreate, onJoin, onCancel, onStart, onReady, on
   el('btnHelp2').onclick = showHelp;
   el('btnHelpClose').onclick = hideHelp;
   // first visit on this device: open the guide before anything else
-  if(!seenHelp()) showHelp();
+  // An invite link opens straight into the room, so do not put the guide in
+  // the way. It is one tap away on the menu and in the lobby.
+  if(!seenHelp() && !invitedCode()) showHelp();
   sync();
-  el('btnCopy').onclick  = ()=>navigator.clipboard?.writeText(roomCodeEl.textContent);
+  // invites: a link that opens the game and joins the room in one tap
+  el('btnWhatsApp').onclick = ()=>{
+    const code = roomCodeEl.textContent;
+    const text = `Join my Blast Yard game! Tap to play: ${inviteLink(code)}  (room code ${code})`;
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  };
+  el('btnCopy').onclick = async ()=>{
+    const btn = el('btnCopy'), link = inviteLink(roomCodeEl.textContent);
+    try { await navigator.clipboard.writeText(link); btn.textContent = 'Link copied'; }
+    catch { window.prompt('Copy this link:', link); }
+    setTimeout(()=>{ btn.textContent = 'Copy invite link'; }, 2000);
+  };
   el('btnLeave').onclick = onLeave;
   btnStart.onclick = onStart;
   btnReady.onclick = onReady;
@@ -87,6 +100,16 @@ export function init({ onLocal, onCreate, onJoin, onCancel, onStart, onReady, on
     saveName(name);
     onName(name);
   };
+}
+
+/* The room code from an invite link (?room=ABCDE), if this page came from one. */
+export function invitedCode(){
+  const code = new URLSearchParams(location.search).get('room');
+  return code && /^[A-Z0-9]{5}$/i.test(code) ? code.toUpperCase() : null;
+}
+
+function inviteLink(code){
+  return location.origin + location.pathname + '?room=' + encodeURIComponent(code);
 }
 
 /* The name is remembered on this device so nobody retypes it every time. */
@@ -174,7 +197,7 @@ export function renderLobby(state){
   roomCodeEl.textContent = state.code;
   lobbyTitle.textContent = played ? 'Next match' : (iOwn ? 'Room open' : 'You are in');
   lobbySub.textContent = iOwn
-    ? 'Send this code to your cousins.'
+    ? 'Invite friends on WhatsApp, or share the code.'
     : 'Everyone here sees the same screen.';
 
   playerList.innerHTML = state.players.map(p=>{
@@ -252,6 +275,15 @@ export function showScoreboard(end, mySlot){
 
   sbSub.textContent = `Round ${end.round} of best of ${end.bestOf}`;
 
+  // the end of a match: who did what, the bit people screenshot
+  const awards = end.matchOver && end.awards ? end.awards : [];
+  sbAwards.classList.toggle('hide', !awards.length);
+  sbAwards.innerHTML = awards.length ? '<h2>Awards</h2>' + awards.map(a=>{
+    const who = a.slots.map((slot,i)=>esc(a.names[i] || SLOT_NAME[slot])).join(' & ');
+    return `<div class="award"><span class="medal">${MEDALS[a.title]||'🏅'}</span>`
+         + `<div><b>${esc(a.title)}: ${who}</b><span>${esc(a.detail)}</span></div></div>`;
+  }).join('') : '';
+
   sbList.innerHTML = end.scores.map(p=>{
     const pips = Array.from({length:end.target}, (_,i)=>
       `<span class="pip${i<p.wins?' won':''}"${i<p.wins?` style="background:${SLOT_COLOR[p.slot]}"`:''}></span>`
@@ -271,6 +303,11 @@ export function setScoreboardCountdown(seconds, matchOver){
     ? `Back to the lobby in ${seconds}`
     : `Next round in ${seconds}`;
 }
+
+const MEDALS = {
+  'Demolition expert':'💥', 'Own worst enemy':'🤦', 'Flattened':'🧱',
+  'Collector':'🎁', 'Bomb happy':'💣'
+};
 
 /* Names come from other people's browsers, so never trust them as markup. */
 function esc(s){

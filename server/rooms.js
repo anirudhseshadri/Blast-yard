@@ -14,6 +14,7 @@ export const MAX_ROOMS = 50;
 const SNAPSHOT_INTERVAL = 0.05;   // seconds, so 20 a second
 const RESULT_HOLD = 1.5;          // seconds the finished board stays up, before the scoreboard
 const SCOREBOARD_PAUSE = 5;       // seconds of scoreboard, counting down to the next round
+const AWARDS_PAUSE = 12;          // the final scoreboard stays longer, so the awards can be read
 const START_COUNTDOWN = 3;        // seconds between "start" and the first round
 export const BEST_OF = [3,5,7];   // what the lobby may pick
 const EMPTY_ROOM_TTL = 60000;     // a room dies a minute after its last player leaves
@@ -149,7 +150,7 @@ export function beginCountdown(room){
   room.phase = 'starting';
   room.startAt = Date.now() + START_COUNTDOWN*1000;
   room.round = 0;
-  room.players.forEach(p=>{ p.wins = 0; });   // a new match starts level
+  room.players.forEach(p=>{ p.wins = 0; p.tally = emptyTally(); });   // a new match starts level
   broadcast(room, { t:'starting', inSeconds: START_COUNTDOWN });
 }
 
@@ -177,14 +178,22 @@ function endRound(room){
 
   const winner = room.players.find(p=>p.slot===room.G.winner);
   if(winner) winner.wins++;
+
+  // add this round's numbers to each player's running total for the match
+  room.players.forEach(p=>{
+    const gp = room.G.players.find(x=>x.slot===p.slot);
+    if(!gp || !gp.stats) return;
+    p.tally = p.tally || emptyTally();
+    for(const k in gp.stats) p.tally[k] += gp.stats[k];
+  });
   room.roundWinner = winner || null;
 }
 
 function enterScoreboard(room){
   room.phase = 'scoreboard';
-  room.endT = SCOREBOARD_PAUSE;
 
   const decided = matchDecided(room);
+  room.endT = decided ? AWARDS_PAUSE : SCOREBOARD_PAUSE;
   const champion = decided ? leader(room) : null;
   if(champion) champion.matches++;
   room.matchOver = decided;
@@ -199,10 +208,40 @@ function enterScoreboard(room){
     matchOver: decided,
     champion: champion ? champion.name || null : null,
     championSlot: champion ? champion.slot : null,
-    nextIn: SCOREBOARD_PAUSE,
+    nextIn: room.endT,
+    awards: decided ? awardsFor(room) : [],
     scores: room.players.slice().sort((a,b)=>a.slot-b.slot)
       .map(p=>({ slot:p.slot, name:p.name, wins:p.wins, matches:p.matches }))
   });
+}
+
+/* ---------------- awards ---------------- */
+
+function emptyTally(){
+  return { kills:0, self:0, pickups:0, bombs:0, crushed:0 };
+}
+
+/* The fun bit at the end of a match. Each award goes to whoever has the most
+   of one thing, ties share it, and an award nobody earned is left out. */
+const AWARDS = [
+  ['kills',   'Demolition expert', n=>`${n} knockout${n===1?'':'s'}`],
+  ['self',    'Own worst enemy',   n=>`blew themselves up ${n} time${n===1?'':'s'}`],
+  ['crushed', 'Flattened',         n=>`caught by the closing walls ${n} time${n===1?'':'s'}`],
+  ['pickups', 'Collector',         n=>`grabbed ${n} power-up${n===1?'':'s'}`],
+  ['bombs',   'Bomb happy',        n=>`dropped ${n} bomb${n===1?'':'s'}`]
+];
+
+function awardsFor(room){
+  const out = [];
+  for(const [key, title, detail] of AWARDS){
+    const best = Math.max(0, ...room.players.map(p=>(p.tally||emptyTally())[key]));
+    if(!best) continue;
+    const who = room.players.filter(p=>(p.tally||emptyTally())[key]===best)
+      .sort((a,b)=>a.slot-b.slot);
+    out.push({ title, detail: detail(best),
+               names: who.map(p=>p.name||null), slots: who.map(p=>p.slot) });
+  }
+  return out;
 }
 
 /* The scoreboard has run its course: either the next round, or back to the
