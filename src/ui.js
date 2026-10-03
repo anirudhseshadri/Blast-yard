@@ -30,7 +30,7 @@ const POWERUPS = [
 
 let menu, lobby, roomCodeEl, playerList, lobbyTitle, lobbySub, lobbyNote;
 let btnStart, btnReady, menuNote, nameInput, mapPick, bestPick, netStatus;
-let scoreboard, sbTitle, sbSub, sbList, sbNext;
+let scoreboard, sbTitle, sbSub, sbList, sbNext, sbAwards;
 let help, statsEl, btnCancel, menuButtons, lastStats = '';
 
 export function init({ onLocal, onCreate, onJoin, onCancel, onStart, onReady, onName, onMap, onBestOf, onLeave }){
@@ -41,7 +41,7 @@ export function init({ onLocal, onCreate, onJoin, onCancel, onStart, onReady, on
   nameInput=el('nameInput'); mapPick=el('mapPick'); bestPick=el('bestPick');
   netStatus=el('netStatus');
   scoreboard=el('scoreboard'); sbTitle=el('sbTitle'); sbSub=el('sbSub');
-  sbList=el('sbList'); sbNext=el('sbNext');
+  sbList=el('sbList'); sbNext=el('sbNext'); sbAwards=el('sbAwards');
   help=el('help'); statsEl=el('stats'); btnCancel=el('btnCancel');
   menuButtons=[el('btnLocal'), el('btnHost'), el('btnJoin'), el('joinCode')];
 
@@ -70,9 +70,22 @@ export function init({ onLocal, onCreate, onJoin, onCancel, onStart, onReady, on
   el('btnHelp2').onclick = showHelp;
   el('btnHelpClose').onclick = hideHelp;
   // first visit on this device: open the guide before anything else
-  if(!seenHelp()) showHelp();
+  // An invite link opens straight into the room, so do not put the guide in
+  // the way. It is one tap away on the menu and in the lobby.
+  if(!seenHelp() && !invitedCode()) showHelp();
   sync();
-  el('btnCopy').onclick  = ()=>navigator.clipboard?.writeText(roomCodeEl.textContent);
+  // invites: a link that opens the game and joins the room in one tap
+  el('btnWhatsApp').onclick = ()=>{
+    const code = roomCodeEl.textContent;
+    const text = `Join my Blast Yard game! Tap to play: ${inviteLink(code)}  (room code ${code})`;
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  };
+  el('btnCopy').onclick = async ()=>{
+    const btn = el('btnCopy'), link = inviteLink(roomCodeEl.textContent);
+    try { await navigator.clipboard.writeText(link); btn.textContent = 'Link copied'; }
+    catch { window.prompt('Copy this link:', link); }
+    setTimeout(()=>{ btn.textContent = 'Copy invite link'; }, 2000);
+  };
   el('btnLeave').onclick = onLeave;
   btnStart.onclick = onStart;
   btnReady.onclick = onReady;
@@ -87,6 +100,16 @@ export function init({ onLocal, onCreate, onJoin, onCancel, onStart, onReady, on
     saveName(name);
     onName(name);
   };
+}
+
+/* The room code from an invite link (?room=ABCDE), if this page came from one. */
+export function invitedCode(){
+  const code = new URLSearchParams(location.search).get('room');
+  return code && /^[A-Z0-9]{5}$/i.test(code) ? code.toUpperCase() : null;
+}
+
+function inviteLink(code){
+  return location.origin + location.pathname + '?room=' + encodeURIComponent(code);
 }
 
 /* The name is remembered on this device so nobody retypes it every time. */
@@ -174,14 +197,14 @@ export function renderLobby(state){
   roomCodeEl.textContent = state.code;
   lobbyTitle.textContent = played ? 'Next match' : (iOwn ? 'Room open' : 'You are in');
   lobbySub.textContent = iOwn
-    ? 'Send this code to your cousins.'
+    ? 'Invite friends on WhatsApp, or share the code.'
     : 'Everyone here sees the same screen.';
 
   playerList.innerHTML = state.players.map(p=>{
     const tags = [
       p.owner ? '<span class="tag">owner</span>' : '',
       p.matches ? `<span class="tag wins">${p.matches} ${p.matches===1?'match':'matches'}</span>` : '',
-      p.ready ? '<span class="tag ready">ready</span>' : '<span class="tag">not ready</span>'
+      p.ready ? '<span class="tag ready">&#10003; ready</span>' : '<span class="tag">waiting</span>'
     ].join('');
     const label = (p.name || SLOT_NAME[p.slot]) + (p.slot===state.you ? ' (you)' : '');
     return `<li class="${p.slot===state.you?'me':''}">`
@@ -189,8 +212,12 @@ export function renderLobby(state){
          + `<span class="pname">${esc(label)}</span>${tags}</li>`;
   }).join('');
 
-  btnReady.textContent = me && me.ready ? 'Ready' : 'Not ready';
-  btnReady.classList.toggle('on', !!(me && me.ready));
+  // The button says what tapping it does, not what state you are in. A label
+  // that reads "Not ready" looked like a status, so nobody knew to tap it.
+  const iReady = !!(me && me.ready);
+  btnReady.innerHTML = iReady ? '&#10003; I\'m ready <small>(tap to undo)</small>' : 'Tap when you\'re ready';
+  btnReady.classList.toggle('on', iReady);
+  btnReady.classList.toggle('ghost', false);
   if(me && nameInput.value !== me.name && document.activeElement !== nameInput){
     nameInput.value = me.name;
   }
@@ -216,9 +243,19 @@ export function renderLobby(state){
   btnStart.disabled = readyCount < 2;
   btnStart.textContent = played ? 'Start another match' : 'Start match';
 
-  lobbyNote.textContent = iOwn
-    ? (readyCount < 2 ? 'Two players need to be ready before you can start.' : '')
-    : 'Waiting for the room owner to start.';
+  // one line that always says who is holding things up and what to do next
+  const owner = state.players.find(p=>p.owner);
+  const ownerName = owner ? (owner.name || SLOT_NAME[owner.slot]) : 'the room owner';
+  const total = state.players.length;
+  const count = `${readyCount} of ${total} ready. `;
+  let next;
+  if(total < 2)        next = 'Share the code. You need at least one more player.';
+  else if(!iReady)     next = iOwn ? 'Tap the yellow button when you\'re ready, then start the match.'
+                                   : `Tap the yellow button when you're ready, so ${ownerName} can start.`;
+  else if(readyCount < 2) next = 'Waiting for one more player to get ready.';
+  else                 next = iOwn ? 'Everyone set? Start the match.'
+                                   : `Waiting for ${ownerName} to start.`;
+  lobbyNote.textContent = count + next;
 }
 
 /* The scoreboard between rounds. One pip per round it takes to win the match,
@@ -237,6 +274,15 @@ export function showScoreboard(end, mySlot){
   if(end.winnerSlot===null && !end.matchOver) sbTitle.textContent = 'Nobody survived';
 
   sbSub.textContent = `Round ${end.round} of best of ${end.bestOf}`;
+
+  // the end of a match: who did what, the bit people screenshot
+  const awards = end.matchOver && end.awards ? end.awards : [];
+  sbAwards.classList.toggle('hide', !awards.length);
+  sbAwards.innerHTML = awards.length ? '<h2>Awards</h2>' + awards.map(a=>{
+    const who = a.slots.map((slot,i)=>esc(a.names[i] || SLOT_NAME[slot])).join(' & ');
+    return `<div class="award"><span class="medal">${MEDALS[a.title]||'🏅'}</span>`
+         + `<div><b>${esc(a.title)}: ${who}</b><span>${esc(a.detail)}</span></div></div>`;
+  }).join('') : '';
 
   sbList.innerHTML = end.scores.map(p=>{
     const pips = Array.from({length:end.target}, (_,i)=>
@@ -257,6 +303,11 @@ export function setScoreboardCountdown(seconds, matchOver){
     ? `Back to the lobby in ${seconds}`
     : `Next round in ${seconds}`;
 }
+
+const MEDALS = {
+  'Demolition expert':'💥', 'Own worst enemy':'🤦', 'Flattened':'🧱',
+  'Collector':'🎁', 'Bomb happy':'💣'
+};
 
 /* Names come from other people's browsers, so never trust them as markup. */
 function esc(s){

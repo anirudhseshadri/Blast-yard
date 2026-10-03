@@ -11,6 +11,12 @@
           blasts will not cross it
        ^  v  <  >   a conveyor, pushing whatever stands on it that way
        A..Z  a teleport pad. The same letter twice makes a pair.
+       %  a brick: like a wall, never breaks, stops blasts, but drawn as
+          brickwork so a map can build mazes that look like buildings
+       o  a hole: nobody can walk in, blasts fly over it, and a kicked bomb
+          that slides into it drops in and is gone
+       *  ice: step on and you slide until something stops you
+       =  a tunnel: walk through it and other players cannot see you
 
    Nothing here draws or simulates. It turns characters into data that both
    the game and the renderer read. */
@@ -18,6 +24,7 @@
 import { COLS, ROWS, EMPTY, SOLID } from '../constants.js';
 
 export const WALL = '#', FLOOR = '.', OPEN = '_', WATER = '~';
+export const BRICK = '%', HOLE = 'o', ICE = '*', TUNNEL = '=';
 
 const CONVEYORS = { '^':[0,-1], 'v':[0,1], '<':[-1,0], '>':[1,0] };
 const SPAWNS = '1234';
@@ -47,11 +54,15 @@ export function parseLayout(layout, name='map'){
     for(let c=0;c<COLS;c++){
       const ch = row[c];
       const key = r+','+c;
-      grid[r][c] = ch===WALL ? SOLID : EMPTY;
+      grid[r][c] = (ch===WALL || ch===BRICK) ? SOLID : EMPTY;
 
       if(ch===WALL || ch===OPEN) continue;
       if(ch===FLOOR){ soft.push([r,c]); continue; }
       if(ch===WATER){ special.set(key,{kind:'water'}); continue; }
+      if(ch===BRICK){ special.set(key,{kind:'brick'}); continue; }
+      if(ch===HOLE){ special.set(key,{kind:'hole'}); continue; }
+      if(ch===ICE){ special.set(key,{kind:'ice'}); continue; }
+      if(ch===TUNNEL){ special.set(key,{kind:'tunnel'}); continue; }
 
       const push = CONVEYORS[ch];
       if(push){ special.set(key,{kind:'conveyor', dx:push[0], dy:push[1]}); continue; }

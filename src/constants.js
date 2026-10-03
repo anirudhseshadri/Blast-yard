@@ -13,4 +13,4 @@ export const PU_WEIGHT = [22,22,14,8,10,8,10,6];
 export const SLOT_COLOR = ['#dfe6ec','#6fcf82','#f2c14e','#ef7fa8'];
 export const SLOT_NAME  = ['Silver','Green','Amber','Rose'];
 
-export const BUILD = 'build 13';
+export const BUILD = 'build 14';

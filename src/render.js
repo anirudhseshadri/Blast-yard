@@ -73,6 +73,44 @@ function drawSpecial(r, c, x, y){
     ctx.beginPath(); ctx.arc(x+TS/2, y+TS/2, 12, 0, 7); ctx.stroke();
     ctx.strokeStyle='rgba(199,125,255,.55)'; ctx.lineWidth=1.5;
     ctx.beginPath(); ctx.arc(x+TS/2, y+TS/2, 6, 0, 7); ctx.stroke();
+    return;
+  }
+
+  if(s.kind==='hole'){
+    ctx.fillStyle='#07080c'; roundRect(x+3,y+3,TS-6,TS-6,10); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(x+6,y+6,TS-12,4);   // depth
+    return;
+  }
+
+  if(s.kind==='ice'){
+    ctx.fillStyle='#9fd3ea'; ctx.fillRect(x,y,TS,TS);
+    ctx.fillStyle='#b9e3f4'; ctx.fillRect(x,y,TS,3);
+    ctx.strokeStyle='rgba(255,255,255,.7)'; ctx.lineWidth=1.5; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(x+8,y+28); ctx.lineTo(x+18,y+18); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x+22,y+14); ctx.lineTo(x+27,y+9); ctx.stroke();
+    return;
+  }
+
+  if(s.kind==='tunnel'){
+    ctx.fillStyle='#16130f'; ctx.fillRect(x,y,TS,TS);
+    ctx.fillStyle='#4a3f33'; ctx.fillRect(x,y,TS,4); ctx.fillRect(x,y+TS-4,TS,4);
+    ctx.strokeStyle='rgba(255,200,120,.12)'; ctx.lineWidth=1;
+    for(const o of [12,28]){ ctx.beginPath(); ctx.moveTo(x+o,y+4); ctx.lineTo(x+o,y+TS-4); ctx.stroke(); }
+  }
+}
+
+/* A brick is a wall that looks like brickwork, so a map can build mazes. */
+function drawBrick(x, y){
+  ctx.fillStyle='#5b2f24'; ctx.fillRect(x+1,y+1,TS-2,TS-2);
+  ctx.fillStyle='#9a4a35';
+  for(let row=0; row<4; row++){
+    const off = row%2 ? -9 : 0;
+    for(let col=0; col<3; col++){
+      const bx = x+2+off+col*18, by = y+2+row*9;
+      const l = Math.max(bx, x+2), r = Math.min(bx+16, x+TS-2);
+      if(r>l) ctx.fillRect(l, by, r-l, 7);
+    }
   }
 }
 
@@ -189,8 +227,10 @@ function fit(text, max){
 
 /* `hint` is the line under the end-of-round message. The caller decides what
    it says, because the renderer does not know whether this browser is hosting.
-   `names` is indexed by slot. A slot with no name falls back to its colour. */
-export function draw(v, hint='', names=[]){
+   `names` is indexed by slot. A slot with no name falls back to its colour.
+   `me` is this browser's own slot online, or -1 on a shared keyboard. It
+   decides who can be seen inside a tunnel. */
+export function draw(v, hint='', names=[], me=-1){
   if(!ctx) return;
   ctx.clearRect(0,0,W,H);
 
@@ -224,7 +264,9 @@ export function draw(v, hint='', names=[]){
     const x=c*TS, y=r*TS+BAR, t=v.grid[r][c];
     ctx.fillStyle = (r+c)%2 ? theme.floorA : theme.floorB;
     ctx.fillRect(x,y,TS,TS);
-    if(t===SOLID){
+    if(t===SOLID && (specials.get(r+','+c)||{}).kind==='brick'){
+      drawBrick(x,y);
+    }else if(t===SOLID){
       ctx.fillStyle=theme.wall;    ctx.fillRect(x+2,y+2,TS-4,TS-4);
       ctx.fillStyle=theme.wallTop; ctx.fillRect(x+2,y+2,TS-4,6);
       ctx.fillStyle=theme.wallLip; ctx.fillRect(x+2,y+TS-8,TS-4,6);
@@ -260,6 +302,12 @@ export function draw(v, hint='', names=[]){
   // players
   v.players.forEach(p=>{
     if(!p.alive) return;
+    // Inside a tunnel: online you see only yourself, faintly. On a shared
+    // screen everyone is faint, since there is nobody to hide from.
+    const s = specials.get(Math.floor(p.y/TS)+','+Math.floor(p.x/TS));
+    const hidden = s && s.kind==='tunnel';
+    if(hidden && me>=0 && p.slot!==me) return;
+    ctx.globalAlpha = hidden ? 0.45 : 1;
     const y=p.y+BAR;
     ctx.fillStyle='rgba(0,0,0,.35)';
     ctx.beginPath(); ctx.ellipse(p.x,y+13,12,5,0,0,7); ctx.fill();
@@ -275,6 +323,7 @@ export function draw(v, hint='', names=[]){
       ctx.fillStyle='#c77dff'; ctx.font='12px system-ui,sans-serif'; ctx.textAlign='center';
       ctx.fillText('drunk', p.x, y-20); ctx.textAlign='left';
     }
+    ctx.globalAlpha = 1;
   });
 
   ctx.fillStyle='#4a5266'; ctx.font='11px system-ui,sans-serif';

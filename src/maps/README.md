@@ -23,6 +23,10 @@ in your editor and it is what you get:
 | `~` | water |
 | `^` `v` `<` `>` | a conveyor, pushing that way |
 | `A`–`Z` | a teleport pad. The same letter twice makes a pair |
+| `%` | brick: a wall drawn as brickwork. Never breaks, stops blasts |
+| `o` | hole: nobody walks in, blasts fly over, a kicked bomb drops in and is gone |
+| `*` | ice: you slide in a straight line until something stops you |
+| `=` | tunnel: walkable, and other players cannot see you inside it |
 
 Every map is checked when the game starts, so a mistake shows up straight
 away with the row it is on:
@@ -75,10 +79,12 @@ roundLength: 120       // seconds before the arena starts closing
 shrinkInterval: 0.28   // seconds between each closing tile
 ```
 
-## The three that ship
+## The maps that ship
 
 | Map | Feel |
 | --- | --- |
 | **The Yard** | the original. Regular pillars, 120s. Its numbers are tuned; leave them alone |
 | **Scrapheap** | heaps instead of rows, packed with crates, 90s |
 | **Waterworks** | open, with water, conveyors and a teleport pair. 150s, but the walls close faster |
+| **Frozen Pond** | an ice lake with holes in the middle, brick cottages in the corners |
+| **Mineshaft** | crossing tunnels, belts feeding into them, holes, and a lift between top and bottom |

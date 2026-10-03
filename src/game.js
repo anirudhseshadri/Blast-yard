@@ -29,7 +29,9 @@ export function newGame(playerDefs, map = DEFAULT_MAP){
     x:(spawns[i][1]+0.5)*TS, y:(spawns[i][0]+0.5)*TS,
     alive:true, maxBombs:1, range:2, speedLv:0, shield:false, kick:false,
     fuse:2.6, curse:0, live:0, inv:0, onPad:false, face:{x:0,y:1},
-    input:{u:0,d:0,l:0,r:0,b:0,k:0}, bombEdge:false, kickEdge:false, passing:new Set()
+    input:{u:0,d:0,l:0,r:0,b:0,k:0}, bombEdge:false, kickEdge:false, passing:new Set(),
+    slide:null,                 // on ice: the direction you are stuck sliding in
+    stats:{kills:0, self:0, pickups:0, bombs:0, crushed:0}
   }));
 
   return {
@@ -86,6 +88,16 @@ function waterAt(G,r,c){
   return !!s && s.kind==='water';
 }
 
+function holeAt(G,r,c){
+  const s = specialAt(G,r,c);
+  return !!s && s.kind==='hole';
+}
+
+function iceUnder(G,p){
+  const s = specialAt(G, Math.floor(p.y/TS), Math.floor(p.x/TS));
+  return !!s && s.kind==='ice';
+}
+
 function bombAt(G,r,c){
   return G.bombs.find(b=> Math.floor(b.y/TS)===r && Math.floor(b.x/TS)===c);
 }
@@ -95,6 +107,7 @@ function canStand(G,p,x,y){
   for(const [ox,oy] of [[-half,-half],[half,-half],[-half,half],[half,half]]){
     const c=Math.floor((x+ox)/TS), r=Math.floor((y+oy)/TS);
     if(blockedTile(G,r,c)) return false;
+    if(holeAt(G,r,c)) return false;        // nobody walks into a hole
     const b=bombAt(G,r,c);
     if(b && !p.passing.has(b.id)) return false;
   }
@@ -126,7 +139,7 @@ export function step(G, dt){
       G.pickups.delete(r+','+c);
       G.bombs = G.bombs.filter(b=> !(Math.floor(b.y/TS)===r && Math.floor(b.x/TS)===c));
       G.players.forEach(p=>{
-        if(p.alive && Math.floor(p.y/TS)===r && Math.floor(p.x/TS)===c) kill(p);
+        if(p.alive && Math.floor(p.y/TS)===r && Math.floor(p.x/TS)===c){ kill(p); p.stats.crushed++; }
       });
     }
   }
@@ -139,7 +152,17 @@ export function step(G, dt){
     let {u,d,l,r,b}=p.input;
     if(p.curse>0){ [u,d]=[d,u]; [l,r]=[r,l]; }
 
-    moveP(G,p,{u,d,l,r},dt);
+    // Ice: once you start moving on it you keep going that way, whatever
+    // you press, until something stops you or you reach solid ground.
+    let dir = {u,d,l,r};
+    if(p.slide && iceUnder(G,p)){
+      dir = {u:+(p.slide.y<0), d:+(p.slide.y>0), l:+(p.slide.x<0), r:+(p.slide.x>0)};
+    }
+    const moved = moveP(G,p,dir,dt);
+    if(iceUnder(G,p)){
+      if(!moved) p.slide = null;
+      else if(!p.slide) p.slide = {x:p.face.x, y:p.face.y};
+    }else p.slide = null;
 
     rideConveyor(G,p,dt);
     useTeleport(G,p);
@@ -163,7 +186,7 @@ export function step(G, dt){
     // pick up
     const key = Math.floor(p.y/TS)+','+Math.floor(p.x/TS);
     const pk = G.pickups.get(key);
-    if(pk && !pk.hidden){ G.pickups.delete(key); grant(p, pk.type); }
+    if(pk && !pk.hidden){ G.pickups.delete(key); grant(p, pk.type); p.stats.pickups++; }
   }
 
   // bombs
@@ -174,6 +197,12 @@ export function step(G, dt){
       const r=Math.floor(ly/TS), c=Math.floor(lx/TS);
       const hitPlayer = G.players.some(p=>p.alive && Math.abs(p.x-lx)<18 && Math.abs(p.y-ly)<18);
       const other = G.bombs.find(o=>o!==b && Math.floor(o.y/TS)===r && Math.floor(o.x/TS)===c);
+      if(holeAt(G,r,c)){                 // it drops in and is gone
+        b.gone = true;
+        const owner = G.players.find(p=>p.slot===b.owner);
+        if(owner) owner.live = Math.max(0, owner.live-1);
+        continue;
+      }
       if(blockedTile(G,r,c) || waterAt(G,r,c) || other || hitPlayer){
         b.x=(Math.round((b.x-TS/2)/TS)+0.5)*TS; b.y=(Math.round((b.y-TS/2)/TS)+0.5)*TS;
         b.vx=b.vy=0;
@@ -181,6 +210,7 @@ export function step(G, dt){
     }
     b.fuse-=dt;
   }
+  G.bombs = G.bombs.filter(b=>!b.gone);
   let guard=0;
   while(G.bombs.some(b=>b.fuse<=0) && guard++<40){
     const b=G.bombs.find(x=>x.fuse<=0);
@@ -194,9 +224,18 @@ export function step(G, dt){
   for(const p of G.players){
     if(!p.alive || p.inv>0) continue;
     const r=Math.floor(p.y/TS), c=Math.floor(p.x/TS);
-    if(G.flames.some(f=>f.r===r && f.c===c)){
+    const f = G.flames.find(f=>f.r===r && f.c===c);
+    if(f){
       if(p.shield){ p.shield=false; p.inv=1.6; }
-      else kill(p);
+      else{
+        kill(p);
+        // credit the knockout to whoever planted the bomb
+        if(f.owner===p.slot) p.stats.self++;
+        else{
+          const by = G.players.find(o=>o.slot===f.owner);
+          if(by) by.stats.kills++;
+        }
+      }
     }
   }
 
@@ -214,7 +253,8 @@ function moveP(G, p, dir, dt){
   const sp = (108 + p.speedLv*26) * dt;
   let dx = dir.r - dir.l, dy = dir.d - dir.u;
   if(dx && dy){ if(canStand(G, p, p.x+dx*sp, p.y)) dy=0; else dx=0; }
-  if(!dx && !dy) return;
+  if(!dx && !dy) return false;
+  const fromX = p.x, fromY = p.y;
 
   p.face = {x:dx, y:dy};
 
@@ -234,6 +274,7 @@ function moveP(G, p, dir, dt){
     }
     if(canStand(G,p,p.x,p.y+dy*sp)) p.y+=dy*sp;
   }
+  return p.x!==fromX || p.y!==fromY;
 }
 
 /* A belt drags whoever stands on it. Normal movement is untouched; this is
@@ -276,6 +317,7 @@ function plant(G,p){
   const b={id:G.bombId++, x:(c+0.5)*TS, y:(r+0.5)*TS, owner:p.slot, fuse:p.fuse, range:p.range, vx:0, vy:0};
   G.bombs.push(b);
   p.live++;
+  p.stats.bombs++;
   p.passing.add(b.id);
 }
 
@@ -285,7 +327,7 @@ function detonate(G,b){
   if(owner) owner.live=Math.max(0,owner.live-1);
 
   const r=Math.floor(b.y/TS), c=Math.floor(b.x/TS);
-  flame(G,r,c);
+  flame(G,r,c,b.owner);
   for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
     for(let i=1;i<=b.range;i++){
       const rr=r+dr*i, cc=c+dc*i;
@@ -293,7 +335,7 @@ function detonate(G,b){
       const t=G.grid[rr][cc];
       if(t===SOLID) break;
       if(waterAt(G,rr,cc)) break;         // the blast dies at the water's edge
-      flame(G,rr,cc);
+      flame(G,rr,cc,b.owner);
       if(t===SOFT){
         G.grid[rr][cc]=EMPTY;
         const pk=G.pickups.get(rr+','+cc);
@@ -306,9 +348,9 @@ function detonate(G,b){
   }
 }
 
-function flame(G,r,c){
+function flame(G,r,c,owner){
   const f=G.flames.find(x=>x.r===r&&x.c===c);
-  if(f) f.t=Math.max(f.t,0.45); else G.flames.push({r,c,t:0.45});
+  if(f){ f.t=Math.max(f.t,0.45); f.owner=owner; } else G.flames.push({r,c,t:0.45,owner});
   const key=r+','+c;
   const pk=G.pickups.get(key);
   if(pk && !pk.hidden) G.pickups.delete(key);
