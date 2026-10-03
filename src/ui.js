@@ -181,7 +181,7 @@ export function renderLobby(state){
     const tags = [
       p.owner ? '<span class="tag">owner</span>' : '',
       p.matches ? `<span class="tag wins">${p.matches} ${p.matches===1?'match':'matches'}</span>` : '',
-      p.ready ? '<span class="tag ready">ready</span>' : '<span class="tag">not ready</span>'
+      p.ready ? '<span class="tag ready">&#10003; ready</span>' : '<span class="tag">waiting</span>'
     ].join('');
     const label = (p.name || SLOT_NAME[p.slot]) + (p.slot===state.you ? ' (you)' : '');
     return `<li class="${p.slot===state.you?'me':''}">`
@@ -189,8 +189,12 @@ export function renderLobby(state){
          + `<span class="pname">${esc(label)}</span>${tags}</li>`;
   }).join('');
 
-  btnReady.textContent = me && me.ready ? 'Ready' : 'Not ready';
-  btnReady.classList.toggle('on', !!(me && me.ready));
+  // The button says what tapping it does, not what state you are in. A label
+  // that reads "Not ready" looked like a status, so nobody knew to tap it.
+  const iReady = !!(me && me.ready);
+  btnReady.innerHTML = iReady ? '&#10003; I\'m ready <small>(tap to undo)</small>' : 'Tap when you\'re ready';
+  btnReady.classList.toggle('on', iReady);
+  btnReady.classList.toggle('ghost', false);
   if(me && nameInput.value !== me.name && document.activeElement !== nameInput){
     nameInput.value = me.name;
   }
@@ -216,9 +220,19 @@ export function renderLobby(state){
   btnStart.disabled = readyCount < 2;
   btnStart.textContent = played ? 'Start another match' : 'Start match';
 
-  lobbyNote.textContent = iOwn
-    ? (readyCount < 2 ? 'Two players need to be ready before you can start.' : '')
-    : 'Waiting for the room owner to start.';
+  // one line that always says who is holding things up and what to do next
+  const owner = state.players.find(p=>p.owner);
+  const ownerName = owner ? (owner.name || SLOT_NAME[owner.slot]) : 'the room owner';
+  const total = state.players.length;
+  const count = `${readyCount} of ${total} ready. `;
+  let next;
+  if(total < 2)        next = 'Share the code. You need at least one more player.';
+  else if(!iReady)     next = iOwn ? 'Tap the yellow button when you\'re ready, then start the match.'
+                                   : `Tap the yellow button when you're ready, so ${ownerName} can start.`;
+  else if(readyCount < 2) next = 'Waiting for one more player to get ready.';
+  else                 next = iOwn ? 'Everyone set? Start the match.'
+                                   : `Waiting for ${ownerName} to start.`;
+  lobbyNote.textContent = count + next;
 }
 
 /* The scoreboard between rounds. One pip per round it takes to win the match,
